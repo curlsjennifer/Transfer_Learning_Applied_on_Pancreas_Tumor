@@ -3,8 +3,9 @@
 Usage: Everying about data arrangement
 
 Content:
-    move_labeldata
-    move_labeldataPC
+    move_labeldata_finecut
+    move_labeldata_55cut
+    move_data
     sort_date
     sort_series
 """
@@ -21,9 +22,9 @@ import pandas as pd
 import pydicom as dicom
 import tqdm
 
-from checking import refine_dcm, check_AVphase
+from checking import refine_dcm, check_avphase
 
-def move_labeldata(label, brief_df, detail_df, source_scan_path, target_base_path, black_list = []):
+def move_labeldata_finecut(label, brief_df, detail_df, source_scan_path, target_base_path, black_list = []):
     """
     Usage: Move DICOM and label (nrrd) to specific location.
 
@@ -79,7 +80,7 @@ def move_labeldata(label, brief_df, detail_df, source_scan_path, target_base_pat
             continue
         if dcm_series_no == series_no:
             # Check if A phase and V phase mix up
-            file_list = check_AVphase(os.path.dirname(dcmpath))
+            file_list = check_avphase(os.path.dirname(dcmpath))
             os.makedirs(target_tumor_parent_path + 'scans')
             for filename in file_list:
                 copy(str(filename), target_tumor_parent_path + 'scans/')
@@ -90,7 +91,7 @@ def move_labeldata(label, brief_df, detail_df, source_scan_path, target_base_pat
     return check_copy
 
 
-def move_labeldata_PC(label, detail_df, source_scan_path, target_base_path, black_list = []):
+def move_labeldata_55cut(label, detail_df, source_scan_path, target_base_path, black_list = []):
     """
     Usage: Move DICOM and label (nrrd) to specific location.
 
@@ -145,7 +146,7 @@ def move_labeldata_PC(label, detail_df, source_scan_path, target_base_path, blac
             continue
         if dcm_series_no == series_no:
             # Check if A phase and V phase mix up
-            file_list = check_AVphase(os.path.dirname(dcmpath))
+            file_list = check_avphase(os.path.dirname(dcmpath))
             os.makedirs(target_tumor_parent_path + 'scans')
             for filename in file_list:
                 copy(str(filename), target_tumor_parent_path + 'scans/')
@@ -154,6 +155,11 @@ def move_labeldata_PC(label, detail_df, source_scan_path, target_base_path, blac
     if check_copy == False:
         print(tumor_id)
     return check_copy
+
+def move_data():
+    """
+    Usage: Copy the specific series of adrenal data
+    """
 
 
 def sort_date(source_path):

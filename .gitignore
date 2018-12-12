@@ -1,2 +1,12 @@
-*.ipynb_checkpoints
-*__pycache
+# Byte-compiled / optimize /DLL file
+__pycache__/
+
+# Django stuff:
+.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Just in case
+.h5
+.dcm

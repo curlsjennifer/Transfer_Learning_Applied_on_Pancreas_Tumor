@@ -4,7 +4,7 @@ Usage: Inspection
 
 Content:
     refine_dcm
-    check_AVphase
+    check_avphase
 """
 import logging
 import glob
@@ -55,11 +55,20 @@ def refine_dcm(dcm_filepath):
     sc.file_meta.TransferSyntaxUID = dicom.uid.ImplicitVRLittleEndian
     return sc
 
-def check_AVphase(dcm_filepath):
+def check_avphase(dcm_filepath):
     """
     Check if the series contain A phase and V phase.
     If so, seperate and return the list for V pahse files.
+    
+    Parameters
+    ----------
+    dcm_filepath: cht
+        The target path. All the dicom file in that path will be examinated.
 
+    Returns
+    -------
+    file_list: list
+        The list that contained all the file path that is in V phase
     """
     time_list = []
     file_list = []
