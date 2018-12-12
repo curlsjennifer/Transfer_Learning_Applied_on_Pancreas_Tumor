@@ -1,4 +1,13 @@
+"""Created on 2018/12/10
+
+Usage: Inspection
+
+Content:
+    refine_dcm
+    check_AVphase
+"""
 import logging
+import glob
 
 import pydicom as dicom
 
@@ -45,3 +54,30 @@ def refine_dcm(dcm_filepath):
     sc = dicom.read_file(byte_dcm)
     sc.file_meta.TransferSyntaxUID = dicom.uid.ImplicitVRLittleEndian
     return sc
+
+def check_AVphase(dcm_filepath):
+    """
+    Check if the series contain A phase and V phase.
+    If so, seperate and return the list for V pahse files.
+
+    """
+    time_list = []
+    file_list = []
+
+    dcmpaths = glob.glob(dcm_filepath+'/*.dcm')
+
+    for dcmpath in dcmpaths:
+        dcmfile = refine_dcm(dcmpath)
+        time_list.append(str(dcmfile[0x0008, 0x0032].value))
+
+    if len(set(time_list)) == 2 and time_list.count(max(time_list)) > 3:
+        for (filename, time) in zip(dcmpaths, time_list): 
+            if time == max(time_list):
+                file_list.append(filename)
+        print('Different phases in', dcm_filepath)
+    else: 
+        file_list = dcmpaths
+    return file_list
+                
+
+
