@@ -5,7 +5,7 @@ Usage: Everying about data arrangement
 Content:
     move_labeldata_finecut
     move_labeldata_55cut
-    move_data
+    move_nolabeldata
     sort_date
     sort_series
 """
@@ -34,8 +34,11 @@ def move_labeldata_finecut(label, brief_df, detail_df, source_scan_path, target_
         The path to the label.
     brief_df: Dataframe
         The chart linking series number
+        'No.', 'Date', 'Series Number'
+        TODO: extract 'Date' from detail_df
     detail_df: Dataframe
         The chart linking patient number and id
+        'Number'
     source_scan_path: cht
         The path of source DICOM
     target_base_path: cht
@@ -72,6 +75,7 @@ def move_labeldata_finecut(label, brief_df, detail_df, source_scan_path, target_
         os.makedirs(target_tumor_parent_path)
     
     check_copy = False
+    # TODO: file name 0001
     for dcmpath in glob.glob(tumor_parent_path+'*/*0001.dcm'):
         # Get DICOM series number and avoid dose description
         try:
@@ -156,7 +160,7 @@ def move_labeldata_55cut(label, detail_df, source_scan_path, target_base_path, b
         print(tumor_id)
     return check_copy
 
-def move_data():
+def move_nolabeldata():
     """
     Usage: Copy the specific series of adrenal data
     """
