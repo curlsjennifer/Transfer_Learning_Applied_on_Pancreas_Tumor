@@ -35,7 +35,7 @@ def move_labeldata_finecut(label, brief_df, detail_df, source_scan_path,
     Parameters
     ----------
     label: cht
-        The path to the label.
+        The path to the label
     brief_df: Dataframe
         The chart linking series number
     detail_df: Dataframe
@@ -44,6 +44,9 @@ def move_labeldata_finecut(label, brief_df, detail_df, source_scan_path,
         The path of source DICOM
     target_base_path: cht
         Target path
+    black_list: list
+        List of skipped patient_id
+        Example: ['PT1', 'PC2']
 
     Returns
     -------
@@ -113,11 +116,13 @@ def move_labeldata_55cut(label, detail_df, source_scan_path,
         The path to the label.
     detail_df: Dataframe
         The chart linking patient number and id
-    data_type: {'normal', 'tumor', 'tumor55}
-        Data type
-        'normal' means normal pancreas
-        'tumor' means pancreas with tumor
-        'tumor55' means pancreas with tumor, and the dicom file are thick cut
+    source_scan_path: cht
+        The path of source DICOM
+    target_base_path: cht
+        Target path
+    black_list: list
+        List of skipped patient_id
+        Example: ['PT1', 'PC2']
 
     Returns
     -------
@@ -175,15 +180,36 @@ def move_labeldata_55cut(label, detail_df, source_scan_path,
     return check_copy
 
 
-def move_nolabeldata(AD_id, detail_df, source_scan_path,
+def move_nolabeldata(patient_id, detail_df, source_scan_path,
                      target_base_path, black_list=[]):
     """
-    Usage: Copy the specific series of adrenal data
+    Usage: Copy the specific series of adrenal data to nolabel_data
+     Usage: Move DICOM and label (nrrd) to specific location.
+
+    Parameters
+    ----------
+    patient_id: cht
+        Patient id ('AD_1', 'AD_2', ...).
+    detail_df: Dataframe
+        The chart linking patient number, id, and series number.
+    source_scan_path: cht
+        The path of source DICOM
+    target_base_path: cht
+        Target path
+    black_list: list
+        List of skipped patient_id
+        Example: ['PT1', 'PC2']
+
+    Returns
+    -------
+    check_copy: bool
+        Whether the file have been copy or not
+
     """
-    dtumor_df = detail_df[detail_df['No.'] == AD_id].reset_index()
+    dtumor_df = detail_df[detail_df['No.'] == patient_id].reset_index()
     assert dtumor_df.shape[0] == 1, "Tumor id duplicated!"
 
-    if AD_id in black_list:
+    if patient_id in black_list:
         print("Skip {} from black list!".format(tumor_id))
         return False
 
@@ -197,7 +223,7 @@ def move_nolabeldata(AD_id, detail_df, source_scan_path,
     # Find
     tumor_parent_path = source_scan_path + '{}/{}/'.format(patient_id,
                                                            exam_date)
-    target_tumor_parent_path = target_base_path + '{}/'.format(AD_id)
+    target_tumor_parent_path = target_base_path + '{}/'.format(patient_id)
 
     if not os.path.exists(target_tumor_parent_path):
         os.makedirs(target_tumor_parent_path)
