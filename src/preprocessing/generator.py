@@ -11,13 +11,24 @@ import nrrd
 import matplotlib.pyplot as plt
 from datetime import datetime as ddt
 
+from checking import refine_dcm
+from preprocessing import get_pixels_hu
 
-def create_box_data(tumorpath, border, sortkey=sortkey):
+
+def get_imageposition(dcmfile):
+    imageposition = np.array(list(dcmfile[0x0020, 0x0032].value))
+    return imageposition
+
+
+def get_pixelspacing(dcmfile):
+    pixelspacing = list(dcmfile[0x0028, 0x0030].value)
+    return pixelspacing
+
+
+def create_box_data(tumorpath, box_save_path, sortkey, border=np.array([0, 0, 0])):
     """
     Usage: Create box data from tumorpath and add border
     """
-
-    logging.info("Start operating " + tumorpath)
 
     tumor_id = ntpath.basename(os.path.normpath(tumorpath))
 
@@ -25,24 +36,27 @@ def create_box_data(tumorpath, border, sortkey=sortkey):
     tumor_label, tumor_options = nrrd.read(tumorpath+'label.nrrd')
     label_shape = np.array(tumor_label.shape[1:]) \
         if len(tumor_label.shape) == 4 else np.array(tumor_label.shape)
+    print(label_shape)
 
     # Get ordered path and find path order
     dcmpathes = sorted(glob.glob(tumorpath+'scans/*.dcm'), key=sortkey)
+    dcmfile_0 = refine_dcm(dcmpathes[0])
+    dcmfile_1 = refine_dcm(dcmpathes[1])
+
     order = 'downup' \
-        if get_imageposition(dcmpathes[0])[2] < \
-            get_imageposition(dcmpathes[1])[2] else 'updown'
-    logging.info("{:<21}: {}".format("DICOM save order", order))
+        if get_imageposition(dcmfile_0)[2] < \
+            get_imageposition(dcmfile_1)[2] else 'updown'
 
     if order == 'updown':
         dcmpathes = dcmpathes[::-1]
-    assert get_imageposition(dcmpathes[0])[2] < \
-        get_imageposition(dcmpathes[1])[2], "Wrong order!"
+        dcmfile_0 = refine_dcm(dcmpathes[0])
+        dcmfile_1 = refine_dcm(dcmpathes[1])
 
     # Find each space relative origin and spacing
-    img_origin = get_imageposition(dcmpathes[0])
-    thickness = abs(get_imageposition(dcmpathes[1])[2] -
-                    get_imageposition(dcmpathes[0]))[2]
-    img_spacing = np.array(get_pixelspacing(dcmpathes[0]) + [float(thickness)])
+    img_origin = get_imageposition(dcmfile_0)
+    thickness = abs(get_imageposition(dcmfile_0)[2] -
+                    get_imageposition(dcmfile_1)[2])
+    img_spacing = np.array(get_pixelspacing(dcmfile_0) + [float(thickness)])
 
     seg_origin = np.array(tumor_options['space origin'], dtype=float)
     if tumor_options['space directions'][0] == 'none':
@@ -52,6 +66,7 @@ def create_box_data(tumorpath, border, sortkey=sortkey):
         seg_spacing = np.diag(np.array(tumor_options['space directions'])
                               .astype(float))
 
+    print(seg_origin, img_origin)
     # Calculate segmetation origin index in image voxel coordinate
     seg_origin_idx = np.round((seg_origin / seg_spacing -
                                img_origin / img_spacing)).astype(int)
@@ -69,15 +84,12 @@ def create_box_data(tumorpath, border, sortkey=sortkey):
         os.mkdir(base_tumor_path)
 
     # Get DICOM scans and transfer to HU
-    patient_scan = [dicom.read_file(dcmpath, force=True)
+    patient_scan = [refine_dcm(dcmpath)
                     for dcmpath in dcmpathes[z_orgidx: z_orgidx+z_len]]
-    for scan in patient_scan:
-        scan.file_meta.TransferSyntaxUID = dicom.uid.ImplicitVRLittleEndian
     patient_hu = get_pixels_hu(patient_scan)[:, y_orgidx: y_orgidx+y_len,
                                              x_orgidx: x_orgidx+x_len]
     patient_hu = patient_hu.transpose(2, 1, 0)
-    np.save(base_tumor_path+'ctscan.npy', patient_hu)
-    logging.info("Save CT scan numpy array.")
+    # np.save(base_tumor_path+'ctscan.npy', patient_hu)
 
     category_cnt = tumor_label.shape[0] \
         if tumor_options['dimension'] == 4 else 1
@@ -96,8 +108,9 @@ def create_box_data(tumorpath, border, sortkey=sortkey):
                            y_border: y_len-y_border,
                            z_border: z_len-z_border] = tumor_label
 
-        save_name = stardard_filename(category_name)
-        np.save(base_tumor_path+'{}.npy'.format(save_name), category_label)
+        save_name = standard_filename(category_name)
+        print(save_name)
+        # np.save(base_tumor_path+'{}.npy'.format(save_name), category_label)
 
 
 def standard_filename(name):
