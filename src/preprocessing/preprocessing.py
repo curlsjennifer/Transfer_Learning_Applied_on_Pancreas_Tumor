@@ -57,3 +57,18 @@ def resample(image, original_spacing, new_spacing=[1, 1, 1]):
     image = scipy.ndimage.zoom(image, real_resize_factor,
                                order=0, mode='nearest')
     return image, new_spacing
+
+
+def minmax_normalization(img):
+    img_min, img_max = np.min(img), np.max(img)
+    img = img - img_min
+    img = img / (img_max - img_min)
+    return img
+
+
+def find_largest(label):
+    lbl_map = measure.label(label.astype(int))
+    volumn_count = np.delete(np.bincount(lbl_map.flat), 0)
+    new_label = np.zeros(label.shape)
+    new_label[np.where(lbl_map == np.argmax(volumn_count)+1)] = 1
+    return new_label
