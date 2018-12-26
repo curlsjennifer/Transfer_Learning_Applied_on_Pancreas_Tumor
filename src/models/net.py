@@ -116,7 +116,7 @@ def conv3x3(in_channels, out_channels, stride=1):
 """
 
 
-def simple_cnn(input_shape, kernel_size, num_classes):
+def simple_cnn_keras(input_shape, num_classes):
     model = Sequential()
     model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', 
                      input_shape=input_shape))
@@ -127,3 +127,5 @@ def simple_cnn(input_shape, kernel_size, num_classes):
     model.add(Dense(128, activation='relu'))
     model.add(Dropout(0.5))
     model.add(Dense(num_classes, activation='softmax'))
+
+    return model

@@ -11,7 +11,7 @@ from keras.backend.tensorflow_backend import set_session
 from sklearn.metrics import f1_score, classification_report
 
 from models.net import res_2dcnn, pred_to_01, simple_cnn_keras
-from models.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, Dataset, DataGenerator_keras
+from models.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, DataGenerator_keras
 from utils import get_config_sha1, f1_keras_metric
 
 
@@ -54,7 +54,7 @@ validation_generator = DataGenerator_keras(
     config['batch_size'], config['input_dim'][:2], config['input_dim'][2], 2, False)
 
 # Model Init
-model = simple_cnn_keras(config['input_dim'][:2], num_classes=2)
+model = simple_cnn_keras(config['input_dim'], num_classes=2)
 model.compile(loss=keras.losses.categorical_crossentropy,
               optimizer=keras.optimizers.Adam(lr=config['lr'], amsgrad=True),
               metrics=['accuracy', f1_keras_metric])

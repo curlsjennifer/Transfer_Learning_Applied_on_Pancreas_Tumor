@@ -10,7 +10,7 @@
     "val_batch_size": 512, 
     "input_dim": (50, 50, 1),
 
-    "model": 'res_2dcnn',
+    "model": 'simple_cnn_keras',
     "conv1_dim": 64,
     
     "case_list_dir": '/home/d/pancreas/box_data_extract',
