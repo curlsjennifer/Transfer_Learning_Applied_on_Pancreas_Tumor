@@ -32,18 +32,55 @@ class res_2dcnn(nn.Module):
         super(res_2dcnn, self).__init__()
         self.conv1 = conv2d_norm_act(in_chan, dim)
         self.conv2 = conv2d_norm_act(dim, 2*dim)
-        self.resConv1 = ResidualBlock(2*dim, 4*dim)
-        self.resConv2 = ResidualBlock(4*dim, 8*dim)
+        self.resConv1 = ResidualBlock(2*dim, 2*dim)
+        self.resConv2 = ResidualBlock(2*dim, 2*dim)
         self.final = nn.Linear(225792, 1)
 
     def forward(self, x):
         x = F.max_pool2d(self.conv1(x), 3, 1)
         x = F.max_pool2d(self.conv2(x), 3, 1)
-        # x = self.resConv1(x)
-        # x = self.resConv2(x)
+        x = self.resConv1(x)
+        x = self.resConv2(x)
+
+	# flatten
+        x = x.view(x.size(0), -1)
+        print(x.size())
+        outs = F.sigmoid(self.final(x))
+
+        return outs
+
+class SeparableConv2d(nn.Module):
+    def __init__(self,in_channels,out_channels,kernel_size=1,stride=1,padding=0,dilation=1,bias=False):
+        super(SeparableConv2d,self).__init__()
+
+        self.conv1 = nn.Conv2d(in_channels,in_channels,kernel_size,stride,padding,dilation,groups=in_channels,bias=bias)
+        self.pointwise = nn.Conv2d(in_channels,out_channels,1,1,0,1,1,bias=bias)
+
+    def forward(self,x):
+        x = self.conv1(x)
+        x = self.pointwise(x)
+        return x
+
+
+class DSCNN(nn.Module):
+    def __init__(self, in_chan, dim):
+        super(DSCNN, self).__init__()
+
+        self.dsc1 = nn.Sequential(SeparableConv2d(in_chan, 2 * dim, 3), nn.BatchNorm2d(2 * dim), nn.ReLU())
+        self.dsc2 = nn.Sequential(SeparableConv2d(2 * dim, 2 * dim, 3, padding=1), nn.BatchNorm2d(2 * dim), nn.ReLU())
+        self.dsc3 = nn.Sequential(SeparableConv2d(2 * dim, 4 * dim, 3), nn.BatchNorm2d(4 * dim), nn.ReLU())
+
+        self.fc1 = nn.Linear(541696, 1)
+
+    def forward(self, x):
+        x = self.dsc1(x)
+        res = x
+        x = self.dsc2(x)
+        x = res + x
+        x = self.dsc3(x)
 
         x = x.view(x.size(0), -1)
-        outs = F.sigmoid(self.final(x))
+        outs = F.sigmoid(self.fc1(x))
 
         return outs
 
