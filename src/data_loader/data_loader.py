@@ -21,13 +21,15 @@ class Dataset_pytorch(data.Dataset):
         list_IDs (list): List of patch IDs
         labels (dict): {patch_id : label}
         patch_paths (dict): {patch_id : abs. path of patch}
+        load_fn(funciton): loading function for images
 
     """
 
-    def __init__(self, list_IDs, labels, patch_paths):
+    def __init__(self, list_IDs, labels, patch_paths, load_fn=np.load):
         self.labels = labels
         self.list_IDs = list_IDs
         self.patch_paths = patch_paths
+        self.load_fn = load_fn
 
     def __len__(self):
         """Get number of data in this dataset
@@ -54,7 +56,7 @@ class Dataset_pytorch(data.Dataset):
         ID = self.list_IDs[index]
 
         # Load data and get label
-        X = torch.from_numpy(np.load(self.patch_paths[ID])[
+        X = torch.from_numpy(self.load_fn(self.patch_paths[ID])[
                              np.newaxis, :, :]).to(torch.float)  # channel first
         y = torch.tensor(self.labels[ID]).to(torch.float)
 
@@ -76,6 +78,7 @@ class DataGenerator_keras(keras.utils.Sequence):
         n_channels=1 (int): number of image channel
         n_classes (int): number of classes
         shuffle (bool): if shuffle data on epoch ends
+	load_fn (func): loading function for images
 
     Attributes:
         same as args
@@ -83,7 +86,7 @@ class DataGenerator_keras(keras.utils.Sequence):
     """
 
     def __init__(self, list_IDs, labels, patch_paths, batch_size=32, dim=(32, 32), n_channels=1,
-                 n_classes=2, shuffle=False):
+                 n_classes=2, shuffle=False, load_fn=np.load):
         'Initialization'
         self.list_IDs = list_IDs
         self.labels = labels
@@ -94,6 +97,8 @@ class DataGenerator_keras(keras.utils.Sequence):
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.shuffle = shuffle
+
+        self.load_fn = load_fn
 
         self.on_epoch_end()
 
@@ -130,7 +135,7 @@ class DataGenerator_keras(keras.utils.Sequence):
         # Generate data
         for i, ID in enumerate(list_IDs_temp):
             # Store sample
-            X[i, ] = np.load(self.patch_paths[ID])[:, :, np.newaxis]  # channel last
+            X[i, ] = self.load_fn(self.patch_paths[ID])[:, :, np.newaxis]  # channel last
 
             # Store class
             y[i] = self.labels[ID]

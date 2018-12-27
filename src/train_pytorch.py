@@ -10,8 +10,8 @@ from torch import nn
 from torch.utils import data
 from sklearn.metrics import f1_score, classification_report
 
-from models.net import res_2dcnn, pred_to_01, DSCNN
-from models.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, Dataset_pytorch
+from models.net_pytorch import res_2dcnn, pred_to_01, DSCNN
+from data_loader.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, Dataset_pytorch
 from utils import get_config_sha1
 
 

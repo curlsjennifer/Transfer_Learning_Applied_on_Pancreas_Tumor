@@ -10,8 +10,8 @@ import keras
 from keras.backend.tensorflow_backend import set_session
 from sklearn.metrics import f1_score, classification_report
 
-from models.net import res_2dcnn, pred_to_01, simple_cnn_keras
-from models.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, DataGenerator_keras
+from models.net_keras import simple_cnn_keras
+from data_loader.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, DataGenerator_keras
 from utils import get_config_sha1, f1_keras_metric
 
 
