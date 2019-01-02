@@ -1,4 +1,5 @@
 from comet_ml import Experiment
+import sys
 import os
 from random import shuffle
 from pprint import pprint
@@ -10,13 +11,13 @@ from torch import nn
 from torch.utils import data
 from sklearn.metrics import f1_score, classification_report
 
-from models.net_pytorch import res_2dcnn, pred_to_01, DSCNN
+from models.net_pytorch import pred_to_01, Vgg, ResNet, Inception
 from data_loader.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, Dataset_pytorch
 from utils import get_config_sha1
 
 
 # Load config
-with open('./configs/config.txt', 'r') as f:
+with open(sys.argv[1], 'r') as f:
     config = literal_eval(f.read())
     config['config_sha1'] = get_config_sha1(config, 5)
     pprint(config)
@@ -53,7 +54,7 @@ validation_generator = data.DataLoader(
     validation_set, batch_size=config['val_batch_size'], shuffle=False, num_workers=config['num_cpu'], pin_memory=True)
 
 # Model Init
-model = eval(config['model'])(1, config['conv1_dim'])
+model = eval(config['model'])()
 model = model.to(device)
 optim = torch.optim.Adam(model.parameters(), lr=config['lr'])
 criterion = nn.BCELoss()
