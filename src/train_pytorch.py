@@ -33,8 +33,8 @@ device = torch.device(
 experiment = Experiment(api_key="fdb4jkVkz4zT8vtOYIRIb0XG7",
                         project_name="pancreas-2d", workspace="adamlin120")
 experiment.log_parameters(config)
-experiment.add_tag('pytorch')
 experiment.add_tag(config['model'])
+experiment.add_tag(config['patch_pancreas_dir'].split('/')[-2])
 
 # split cases into train, val, test
 case_list = os.listdir(config['case_list_dir'])
