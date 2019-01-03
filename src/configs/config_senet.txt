@@ -9,7 +9,7 @@
     "val_batch_size": 512, 
     "input_dim": (50, 50, 1),
 
-    "model": 'Inception',
+    "model": 'SENet',
     
     "case_list_dir": '/home/d/pancreas/box_data_extract',
     "case_split_ratio": (.8, .1, .1),

@@ -11,7 +11,8 @@ from torch import nn
 from torch.utils import data
 from sklearn.metrics import f1_score, classification_report
 
-from models.net_pytorch import pred_to_01, Vgg, ResNet, Inception
+from models.net_pytorch import pred_to_01
+from models.net_pytorch import *
 from data_loader.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, Dataset_pytorch
 from utils import get_config_sha1
 
