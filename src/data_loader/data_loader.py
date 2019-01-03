@@ -91,7 +91,7 @@ class DataGenerator_keras(keras.utils.Sequence):
         self.list_IDs = list_IDs
         self.labels = labels
         self.patch_paths = patch_paths
-        
+
         self.batch_size = batch_size
         self.dim = dim
         self.n_channels = n_channels
@@ -143,7 +143,7 @@ class DataGenerator_keras(keras.utils.Sequence):
         return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
 
 
-def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_seed=None):
+def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path=None, test_cases=None, random_seed=None):
     """Splting all cases to train, val, test part
 
     If path is not empty str, partition dict is saved for reproducibility.
@@ -152,6 +152,7 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_
         case_list (list): The list contains case name.
         ratio (tup): Data split ratio. SHOULD sum to 1. (train, val, test) Defaults to (.8, .1, .1).
         path (str): Path to Save the partition dict for reproducibility.
+        test_cases (list): For fixing the testing cases.
         random_seed (int): Random Seed.
 
 
@@ -163,14 +164,23 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_
 
     print('SPLIT_SAVE_CASE_PARTITION:\tStart spliting cases...')
 
-    # load case list and spilt to 3 part
-    print('SPLIT_SAVE_CASE_PARTITION:\tTarget Partition Ratio: (train, val, test)={}'.format(ratio))
     partition = {}
     partition['all'] = case_list
-    partition['train'], partition['test'] = train_test_split(
-        partition['all'], test_size=ratio[2], random_state=random_seed)
-    partition['train'], partition['validation'] = train_test_split(
-        partition['train'], test_size=ratio[1] / (ratio[0] + ratio[1]), random_state=random_seed)
+    if test_cases is None:
+        # load case list and spilt to 3 part
+        print('SPLIT_SAVE_CASE_PARTITION:\tTarget Partition Ratio: (train, val, test)={}'.format(ratio))
+        partition['train'], partition['test'] = train_test_split(
+            partition['all'], test_size=ratio[2], random_state=random_seed)
+        partition['train'], partition['validation'] = train_test_split(
+            partition['train'], test_size=ratio[1] / (ratio[0] + ratio[1]), random_state=random_seed)
+    elif type(test_cases) is list:
+        # load predifined test cases
+        print('SPLIT_SAVE_CASE_PARTITION:\tUsing PREDEFINED TEST CASES')
+        partition['validation'] = test_cases
+        partition['test'] = []
+        partition['train'] = list(set(case_list) - set(test_cases))
+    else:
+        raise TypeError("test_cases expected to be \"list\", instead got {}".format(type(test_cases)))
 
     # report actual partition ratio
     num_parts = list(map(len, [partition[part]
@@ -181,7 +191,7 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_
 
     print('SPLIT_SAVE_CASE_PARTITION:\tDone Partition')
     # saving partition dict to disk
-    if path != "":
+    if path is not None:
         print('SPLIT_SAVE_CASE_PARTITION:\tStart saving partition dict to {}'.format(path))
         with open(path, 'wb') as f:
             pickle.dump(partition, f, pickle.HIGHEST_PROTOCOL)

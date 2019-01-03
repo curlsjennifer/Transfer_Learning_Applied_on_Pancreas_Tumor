@@ -39,7 +39,7 @@ experiment.add_tag(config['model'])
 # split cases into train, val, test
 case_list = os.listdir(config['case_list_dir'])
 case_partition = split_save_case_partition(case_list, config['case_split_ratio'], path=config['case_partition_path'],
-                                           random_seed=config['random_seed']) if config['case_partition_path'] == '' else load_case_partition(config['case_partition_path'])
+                                           test_cases=config['test_list'], random_seed=config['random_seed'])
 
 # Get patch partition
 patch_partition, patch_paths, labels = get_patch_partition_labels(
