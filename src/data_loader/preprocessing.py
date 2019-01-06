@@ -5,6 +5,10 @@ Usage: Everying about image preprocessing
 Content:
     get_pixels_hu
     resample
+    minmax_normalization
+    windowing
+    smoothing
+    find_largest
 """
 
 import os
@@ -13,6 +17,7 @@ import ntpath
 
 import numpy as np
 import nibabel as nib
+from skimage import morphology, measure
 
 
 def get_pixels_hu(scans):
@@ -64,6 +69,18 @@ def minmax_normalization(img):
     img = img - img_min
     img = img / (img_max - img_min)
     return img
+
+
+def windowing(img, min_val=-50, max_val=200):
+    img = np.clip(img, min_val, max_val)
+    return img
+
+
+def smoothing(mask):
+    assert len(mask.shape) == 3, "The input dimension must be 3!"
+    mask = morphology.erosion(mask, np.ones([3, 3, 3]))
+    mask = morphology.dilation(mask, np.ones([3, 3, 3]))
+    return mask
 
 
 def find_largest(label):

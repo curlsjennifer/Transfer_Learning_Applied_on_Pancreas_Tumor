@@ -1,3 +1,15 @@
+"""Created on 2019/01/02
+
+Usage: 2D patch data generator
+
+Content:
+    patch_generator
+    masked_2D_sampler
+    masked_3D_sampler
+    adjust_patch_num
+"""
+
+
 import os
 import glob
 import ntpath
@@ -8,8 +20,106 @@ from skimage import morphology, measure
 import scipy.misc
 import random
 
+from data_loader.preprocessing import minmax_normalization, windowing, smoothing
+
+
+def patch_generator(data_path, ID, patch_size=50,
+                    dilation=[5, 5, 5], add_mask=True):
+    """
+    Usage: Complete process of patch generating
+
+    Parameters
+    ----------
+    data_path (str): The path for the box data
+    ID (str): The target ID
+              Example: 'PT1'
+    patch_size (int): Patch size, default to 50
+    dilation (int): the dilation of non-tumor region
+
+    Returns
+    -------
+        List: each content is a 2D patch
+        List: each content is a label
+
+    """
+
+    X = []
+    Y = []
+    if ID[:2] == 'NP' or ID[:2] == 'AD':
+        img_path = data_path + '/' + ID + '/ctscan.npy'
+        pan_path = data_path + '/' + ID + '/pancreas.npy'
+
+        pancreas = np.load(pan_path)
+        pancreas = smoothing(pancreas)
+        pan_coords = adjust_patch_num(pancreas, patch_size, 30, 0.5)
+
+        img = np.load(img_path)
+        img = windowing(img)
+        img = minmax_normalization(img)
+        if add_mask:
+            img = img * pancreas
+
+        for coord in pan_coords:
+            mask_pancreas = img[coord[1]:coord[4], coord[2]:coord[5], coord[3]]
+            X.append(mask_pancreas)
+            Y.append(0)
+
+    else:
+        img_path = data_path + '/' + ID + '/ctscan.npy'
+        les_path = data_path + '/' + ID + '/lesion.npy'
+        pan_path = data_path + '/' + ID + '/pancreas.npy'
+
+        lesion = np.load(les_path)
+        les_coords = adjust_patch_num(lesion, patch_size, 30, 0.5, force=True)
+
+        pancreas = np.load(pan_path)
+        lesion_remove = morphology.dilation(lesion, np.ones(dilation))
+        pancreas[np.where(lesion_remove == 1)] = 0
+
+        pancreas = smoothing(pancreas)
+        pan_coords = adjust_patch_num(pancreas, patch_size, 30, 0.5)
+
+        img = np.load(img_path)
+        img = windowing(img)
+        img = minmax_normalization(img)
+        if add_mask:
+            img_pan = img * pancreas
+            img_les = img * lesion
+        else:
+            img_pan = img
+            img_les = img
+
+        for coord in pan_coords:
+            mask_pancreas = img_pan[coord[1]:coord[4],
+                                    coord[2]:coord[5], coord[3]]
+            X.append(mask_pancreas)
+            Y.append(0)
+        for coord in les_coords:
+            mask_pancreas = img_les[coord[1]:coord[4],
+                                    coord[2]:coord[5], coord[3]]
+            X.append(mask_pancreas)
+            Y.append(1)
+    return X, Y
+
 
 def masked_2D_sampler(mask, patch_size, stride, threadshold, value=0):
+    """
+    Usage: generate 2D patches from mask
+
+    Parameters
+    ----------
+    mask (numpy array): Mask for patch segmentation
+    patch_size (int): Patch size
+    stride (int): Distance of the moving window
+    threadshold (float): 0 < threadshold < 1
+
+    Returns
+    -------
+    List: each content is a 2D patch coordinates [y, min x, min y, min z,
+                                                     max x, max y, max z]
+
+    """
+
     coords = []
     for z in range(mask.shape[2]):
         lbl_map = measure.label(mask[:, :, z].astype(int))
@@ -17,7 +127,6 @@ def masked_2D_sampler(mask, patch_size, stride, threadshold, value=0):
             box = region.bbox
             x_len = box[2] - box[0]
             y_len = box[3] - box[1]
-            # print(z, x_len, y_len)
             for row in range(max((x_len-patch_size), 0) // stride + 1):
                 for col in range(max((y_len-patch_size), 0) // stride + 1):
                     x_min = box[0]+row*stride
@@ -34,7 +143,6 @@ def masked_2D_sampler(mask, patch_size, stride, threadshold, value=0):
                     z_min = z
                     z_max = z+1
                     patch = mask[x_min:x_max, y_min:y_max, z_min:z_max]
-                    # print(x_min, x_max, y_min, y_max, np.sum(patch))
                     if np.sum(patch)/(patch_size**2) > threadshold:
                         coords.append([value, x_min, y_min, z_min,
                                        x_max, y_max, z_max])
@@ -42,6 +150,23 @@ def masked_2D_sampler(mask, patch_size, stride, threadshold, value=0):
 
 
 def masked_3D_sampler(mask, patch_size, stride, threadshold, value=0):
+    """
+    Usage: generate 3D patches from mask
+
+    Parameters
+    ----------
+    mask (numpy array): Mask for patch segmentation
+    patch_size (int): Patch size
+    stride (int): Distance of the moving window
+    threadshold (float): 0 < threadshold < 1
+
+    Returns
+    -------
+    List: each content is a 2D patch coordinates [y, min x, min y, min z,
+                                                     max x, max y, max z]
+
+    """
+
     coords = []
     lbl_map = measure.label(mask.astype(int))
     for region in measure.regionprops(lbl_map):
@@ -77,30 +202,58 @@ def masked_3D_sampler(mask, patch_size, stride, threadshold, value=0):
     return coords
 
 
-def adjust_patch_num(label, patch_size, stride, threadshold, stride_decay=0.7,
-                     threadshold_decay=0.5, min_amount=10, max_amount=200):
+def adjust_patch_num(mask, patch_size, stride, threadshold, stride_decay=0.7,
+                     threadshold_decay=0.5, min_amount=10, max_amount=200,
+                     force=False):
+    """
+    Usage: adjust the number of patches in each case
+
+    Parameters
+    ----------
+    mask (numpy array): Mask for patch segmentation
+    patch_size (int): Original patch size
+    stride (int): Original distance of the moving window
+    threadshold (float): 0 < threadshold < 1, original threadshold
+    stride_decay (float): 0 < stride_decay < 1, decay amount of stride
+    threadshold_decay (float): 0 < threadshold_decay < 1,
+                               decay amount of stride
+    min_amount (int): Minimal amount of patches in each case
+                      Please notice that this only monitor the decay part,
+                      sometimes it still cannot generate any patches,
+                      unless using force
+    max_amount (int): Maximal amount of patches in each case
+    force (bool): when there's more than 10 pixels in a patches,
+                  it will be counted.
+
+    Returns
+    -------
+    List: each content is a 2D patch coordinates [y, min x, min y, min z,
+                                                     max x, max y, max z]
+
+    """
 
     # initial generating
-    coords = masked_2D_sampler(label, patch_size, stride, threadshold)
+    coords = []
 
     # loose standard if not enough patches
-    while len(coords) < min_amount and stride > 10 and threadshold > 0.15:
+    while len(coords) < min_amount and stride > 10 and threadshold > 0.1:
+        coords = masked_2D_sampler(mask, patch_size, stride, threadshold)
         stride = int(stride * stride_decay)
         threadshold = threadshold * threadshold_decay
-        print("Adjust stide and threadshold to", stride, threadshold)
-        coords = masked_2D_sampler(label, patch_size, stride, threadshold)
+
+    # force to generate mask if the mask is "tumor"
+    if len(coords) == 0 and force:
+        coords = masked_2D_sampler(mask, patch_size,
+                                   stride, 10/(patch_size**2))
+        min_amount = 5
 
     # copy region if still not enough patches
-    if len(coords) < min_amount:
-        print("Still too less:", np.sum(label))
-        # coords = masked_2D_copy_sampler
+    while len(coords) < min_amount and len(coords) > 0:
+        coords = coords * 2
 
     # randomly delete patches if too much
     if len(coords) > max_amount:
         random.shuffle(coords)
         coords = coords[:max_amount]
-        print("Reduce amount")
-
-    print("Final len of coords:", len(coords))
 
     return coords
