@@ -1,6 +1,7 @@
 from comet_ml import Experiment
 import sys
 import os
+import time
 from random import shuffle
 from pprint import pprint
 from ast import literal_eval
@@ -21,10 +22,16 @@ from utils import get_config_sha1
 with open(sys.argv[1], 'r') as f:
     config = literal_eval(f.read())
     config['config_sha1'] = get_config_sha1(config, 5)
+    config['log_interval'] = 10
+    config['lr'] = 1e-5
+    config['checkpoint_dir'] = './ckpt/'
+    config['run_name'] = 'test'
     pprint(config)
 
 # Env settings
 os.environ["CUDA_VISIBLE_DEVICES"] = config['CUDA_VISIBLE_DEVICES']
+if not os.path.isdir(os.path.join(config['checkpoint_dir'], config['run_name'])):
+    os.mkdir(os.path.join(config['checkpoint_dir'], config['run_name']))
 # check availability of GPU
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -69,7 +76,7 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
         experiment.log_current_epoch(epoch)
         num_correct, num_count, running_loss, accu = 0.0, 0.0, 0.0, 0.0
         pbar = tqdm(enumerate(training_generator),
-                    desc='TRAIN loop', leave=False)
+                    desc='TRAIN loop', leave=False, total=len(training_generator))
         for i, (local_batch, local_labels) in pbar:
             global_step += 1
             # Transfer to GPU
@@ -88,16 +95,16 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
             num_correct += (y_pred_class.clone().detach().cpu()
                             == local_labels.clone().detach().cpu()).sum()
             num_count += len(local_labels)
-            if global_step % 1 == 0:
+            if global_step % config['log_interval'] == 0:
                 accu = float(num_correct) / num_count
                 f1 = f1_score(local_labels.clone().detach().cpu(
                 ), y_pred_class.clone().detach().cpu(), average='macro')
-                pbar.set_description('Loss: {0:.3f}'.format(running_loss))
-                pbar.refresh()
                 experiment.log_metric("loss", running_loss, step=global_step)
                 experiment.log_metric("accuracy", accu, step=global_step)
                 experiment.log_metric("f1", f1, step=global_step)
+                pbar.set_postfix({'loss': running_loss, 'accuracy': accu, 'f1': f1})
                 num_correct, num_count, running_loss = 0.0, 0.0, 0.0
+            pbar.update(1)
 
     # Validation
     with experiment.test():
@@ -126,9 +133,16 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
             accu = float(num_correct) / num_count
             f1 = f1_score(Y.clone().detach().cpu(),
                           pred.clone().detach().cpu(), average='macro')
-            tqdm.write(classification_report(Y, pred))
             tqdm.write('\nEPOCH: {}  VALADATION Loss: {}  Accu: {} F1: {}\n'.format(
                 epoch, running_loss, accu, f1))
+            tqdm.write(classification_report(Y, pred, target_names=['pancreas', 'leison']))
             experiment.log_metric("loss", running_loss, step=global_step)
             experiment.log_metric("accuracy", accu, step=global_step)
             experiment.log_metric("f1", f1, step=global_step)
+
+    torch.save({
+        'config': config,
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optim.state_dict()
+        }, os.path.join(config['checkpoint_dir'], config['run_name'],'{}_{}_{}.pt'.format(int(time.time()), epoch, global_step)))

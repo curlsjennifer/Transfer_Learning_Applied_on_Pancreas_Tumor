@@ -253,7 +253,7 @@ def get_patch_partition_labels(case_partition, pancreas_dir, lesion_dir):
     for part in ['train', 'validation', 'test']:
         print('GET_PATCH_PARTITION_LABELS:\t Progress: {}'.format(part))
         for case in case_partition[part]:
-            for i, path_dir in enumerate([lesion_dir, pancreas_dir]):
+            for i, path_dir in enumerate([pancreas_dir, lesion_dir]):
                 for patch_path in glob.glob(path_dir + '/' + case + '_*.npy'):
                     patch_id = patch_path.split('/')[-1].split('.')[0]
                     patch_partition[part].append(patch_id)

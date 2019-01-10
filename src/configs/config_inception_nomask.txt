@@ -1,5 +1,5 @@
 {
-    "CUDA_VISIBLE_DEVICES": "2", 
+    "CUDA_VISIBLE_DEVICES": "0", 
     "num_cpu": 10,
     "random_seed": 13,
 
