@@ -60,12 +60,18 @@ def case_base_dataframe(df, test_cases):
                    )
     return case_base_df
 
+# example
+# python test_pytorch.py \
+#   -c ./ckpt/test/1547109656_49_9900.pt \
+#   -g 0 \
+#   --test_cases  'NP4' 'NP8' 'NP2' 'NP9' \
+#   --case_base_report ./case_base_df.pkl
 
 # argument parser
 parser = argparse.ArgumentParser(description='Testing of pancrease 2d classification model')
 parser.add_argument('-c', '--ckpt_path', help='model checkpoint path')
 parser.add_argument('--test_cases', help='test cases list', nargs='+', default=[])
-parser.add_argument('--case_base_report', help='file for save case base report', default=None)
+parser.add_argument('--case_base_report', help='file for save case base report. TWO format: .csv, .pkl', default=None)
 
 parser.add_argument('--gpu_device', '-g', help='cuda device index', default="")
 parser.add_argument('--batch_size', help='batch size', type=int, default=128)
@@ -125,8 +131,9 @@ for local_batch, local_labels, id in tqdm(test_generator, desc='TEST loop', leav
 
 accu = accuracy_score(Y, pred_class)
 
-print('Accu: {}\n'.format(accu))
+print('\n\n\tTotal Accu: {}\n'.format(accu))
 print(classification_report(Y, pred_class, target_names=['pancreas', 'leison']))
+print('\n\tTotal Confusion Matrix')
 print(confusion_matrix(Y, pred_class))
 
 cases = [id.split('_')[0] for id in IDs]
@@ -138,8 +145,12 @@ df = pd.DataFrame(
         index=pd.MultiIndex.from_tuples(zip(cases, IDs), names=['case', 'patch_id'])).sort_index()
 df_case = case_base_dataframe(df, args.test_cases)
 
-print(df)
 print(df_case)
 
 if args.case_base_report is not None:
-    df_case.to_pickle(args.case_base_report)
+    args.case_base_report = args.case_base_report.strip()
+    if args.case_base_report.split('.')[-1] == 'pkl':
+        df_case.to_pickle(args.case_base_report)
+    elif args.case_base_report.split('.')[-1] == 'csv':
+        df_case.to_csv(args.case_base_report)
+    print('\tCase Base Report Successfully Saved at {}'.format(args.case_base_report))

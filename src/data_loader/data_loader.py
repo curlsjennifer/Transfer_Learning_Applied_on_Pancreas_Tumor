@@ -25,11 +25,12 @@ class Dataset_pytorch(data.Dataset):
 
     """
 
-    def __init__(self, list_IDs, labels, patch_paths, load_fn=np.load):
+    def __init__(self, list_IDs, labels, patch_paths, load_fn=np.load, return_id=False):
         self.labels = labels
         self.list_IDs = list_IDs
         self.patch_paths = patch_paths
         self.load_fn = load_fn
+        self.return_id = return_id
 
     def __len__(self):
         """Get number of data in this dataset
@@ -60,6 +61,8 @@ class Dataset_pytorch(data.Dataset):
                              np.newaxis, :, :]).to(torch.float)  # channel first
         y = torch.tensor(self.labels[ID]).to(torch.float)
 
+        if self.return_id:
+            return X, y, ID
         return X, y
 
 
