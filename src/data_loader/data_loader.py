@@ -330,11 +330,11 @@ def get_patch_partition_labels(case_partition, pancreas_dir, lesion_dir):
     return patch_partition, patch_paths, labels
 
 
-def load_patches(data_path, case_list):
+def load_patches(data_path, case_list, patch_size=50):
     X_total = []
     y_total = []
     for ID in tqdm.tqdm(case_list):
-        X_tmp, y_tmp = patch_generator(data_path, ID)
+        X_tmp, y_tmp = patch_generator(data_path, ID, patch_size)
         X_total.extend(X_tmp)
         y_total.extend(y_tmp)
     X = np.array(X_total)

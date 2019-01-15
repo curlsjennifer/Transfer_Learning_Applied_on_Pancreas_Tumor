@@ -18,6 +18,7 @@ import ntpath
 import numpy as np
 import nibabel as nib
 from skimage import morphology, measure
+import scipy
 
 
 def get_pixels_hu(scans):
@@ -28,10 +29,6 @@ def get_pixels_hu(scans):
     # Convert to int16, should be possible as values should
     # always be low enough (<32k)
     image = np.stack([s.pixel_array for s in scans]).astype(np.int16)
-
-    # Set outside-of-scan pixels to 0
-    # The intercept is usually -1024, so air is approximately 0
-    image[image == -2000] = 0
 
     # Convert to Hounsfield units (HU)
     for slice_number in range(len(scans)):

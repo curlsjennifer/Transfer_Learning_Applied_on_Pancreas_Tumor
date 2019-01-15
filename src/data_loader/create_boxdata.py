@@ -1,3 +1,14 @@
+"""Created on 2019/01/13
+
+Usage: From label data to box data
+
+Content:
+    get_imageposition
+    get_pixelspacing
+    create_boxdata
+    create_AD_boxdata
+"""
+
 import os
 import glob
 import ntpath
@@ -10,9 +21,12 @@ import pydicom as dicom
 import nrrd
 import matplotlib.pyplot as plt
 from datetime import datetime as ddt
+from skimage import morphology, measure
+import nibabel as nib
+import scipy
 
 from checking import refine_dcm
-from preprocessing import get_pixels_hu, resample
+from preprocessing import get_pixels_hu, resample, find_largest
 
 
 def get_imageposition(dcmfile):
@@ -27,8 +41,8 @@ def get_pixelspacing(dcmfile):
 
 def create_boxdata(tumorpath, sortkey,
                    border=np.array([0, 0, 0]),
-                   savefile=False,
                    box_save_path='',
+                   change_spacing=True,
                    new_spacing=[1, 1, 5]):
     """
     Usage: Create box data from tumorpath and add border
@@ -106,7 +120,8 @@ def create_boxdata(tumorpath, sortkey,
                                              x_orgidx: x_orgidx+x_len]
     patient_hu = patient_hu.transpose(2, 1, 0)
 
-    patient_hu, _ = resample(patient_hu, img_spacing, new_spacing)
+    if change_spacing:
+        patient_hu, _ = resample(patient_hu, img_spacing, new_spacing)
 
     category_cnt = tumor_label.shape[0] \
         if tumor_options['dimension'] == 4 else 1
@@ -125,11 +140,13 @@ def create_boxdata(tumorpath, sortkey,
                            y_border: y_len-y_border,
                            z_border: z_len-z_border] = tumor_label
 
-        category_label, _ = resample(category_label, img_spacing, new_spacing)
+        if change_spacing:
+            category_label, _ = resample(category_label,
+                                         img_spacing, new_spacing)
         save_name = standard_filename(category_name)
         label.append([save_name, category_label])
 
-    if savefile:
+    if box_save_path:
         base_tumor_path = box_save_path + tumor_id + '/'
         if not os.path.exists(base_tumor_path):
             os.mkdir(base_tumor_path)
@@ -139,6 +156,99 @@ def create_boxdata(tumorpath, sortkey,
             np.save(base_tumor_path + item[0] + '.npy', item[1])
 
     return patient_hu, label
+
+
+def create_AD_boxdata(tumorpath, sortkey,
+                      border=np.array([0, 0, 0]),
+                      box_save_path='',
+                      change_spacing=True,
+                      new_spacing=[1, 1, 5]):
+    """
+    Usage: Create box data from tumorpath and add border
+
+    Parameters
+    ----------
+    tumorpath (str): The path for the specific study in label data
+    sortkey : Method for sorting file name
+    border (numpy array): default [0, 0, 0]
+    savefile (bool): Whether saving box data or not
+    box_save_path (str): The saving path
+    new_spacing (numpy array): The target spacing for resample
+
+    Returns
+    -------
+    Numpy array: 3D array of the box image
+    List: the list containing all the label.
+          In each content,
+          the first value is string of label name
+          the second value is the numpy array of the mask
+    """
+
+    ID = ntpath.basename(os.path.normpath(tumorpath))
+
+    # Get ordered path and find path order
+    dcmpathes = sorted(glob.glob(tumorpath+'scans/*.dcm'), key=sortkey)
+    dcmfile_0 = refine_dcm(dcmpathes[0])
+    dcmfile_1 = refine_dcm(dcmpathes[1])
+
+    order = 'downup' \
+        if get_imageposition(dcmfile_0)[2] < \
+            get_imageposition(dcmfile_1)[2] else 'updown'
+
+    if order == 'updown':
+        dcmpathes = dcmpathes[::-1]
+        dcmfile_0 = refine_dcm(dcmpathes[0])
+        dcmfile_1 = refine_dcm(dcmpathes[1])
+
+    # Find each space relative origin and spacing
+    img_origin = get_imageposition(dcmfile_0)
+    thickness = abs(get_imageposition(dcmfile_0)[2] -
+                    get_imageposition(dcmfile_1)[2])
+    img_spacing = np.array(get_pixelspacing(dcmfile_0) + [float(thickness)])
+
+    # Get DICOM scans and transfer to HU
+    patient_scan = [refine_dcm(dcmpath) for dcmpath in dcmpathes]
+
+    patient_hu = get_pixels_hu(patient_scan)
+    patient_hu = patient_hu.transpose(2, 1, 0)
+
+    # Read label Nifti
+    label_ori_path = '/home/d/pancreas/no_label_data/result/'
+    label_file = label_ori_path + ID + '.nii/' + ID + '.nii_stage2/' \
+        + ID + '.nii_data2/' + ID + '.nii_data2--PRED.nii.gz'
+    label = nib.load(label_file)
+    lbl = label.get_data()
+    lbl_append = scipy.ndimage.zoom(lbl, 2, order=0)
+    lbl_append = lbl_append[:, :, :patient_hu.shape[2]]
+    lbl_append = lbl_append[::-1, ::-1, :]
+
+    pancreas_lbl = np.zeros(lbl_append.shape)
+    pancreas_lbl[np.where(lbl_append == 7)] = 1
+    pancreas_lbl = find_largest(pancreas_lbl)
+
+    index = np.where(pancreas_lbl == 1)
+    xmin, ymin, zmin = np.min(index, axis=1)
+    xmax, ymax, zmax = np.max(index, axis=1)
+
+    # box_img = patient_hu[xmin:xmax, ymin:ymax, zmin:zmax]
+    box_img = patient_hu
+
+    # box_pan = pancreas_lbl[xmin:xmax, ymin:ymax, zmin:zmax]
+    box_pan = pancreas_lbl
+
+    if change_spacing:
+        box_img, _ = resample(box_img, img_spacing, new_spacing)
+        box_pan, _ = resample(box_pan, img_spacing, new_spacing)
+    box_pan = morphology.erosion(box_pan, np.ones([3, 3, 3]))
+
+    if box_save_path:
+        base_tumor_path = box_save_path + ID + '/'
+        if not os.path.exists(base_tumor_path):
+            os.mkdir(base_tumor_path)
+        np.save(base_tumor_path + 'ctscan.npy', box_img)
+        np.save(base_tumor_path + 'pancreas.npy', box_pan)
+
+    return box_img, box_pan
 
 
 def standard_filename(name):

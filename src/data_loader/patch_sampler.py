@@ -38,8 +38,8 @@ def patch_generator(data_path, ID, patch_size=50,
 
     Returns
     -------
-        List: each content is a 2D patch
-        List: each content is a label
+    List: each content is a 2D patch
+    List: each content is a label
 
     """
 
@@ -92,13 +92,19 @@ def patch_generator(data_path, ID, patch_size=50,
         for coord in pan_coords:
             mask_pancreas = img_pan[coord[1]:coord[4],
                                     coord[2]:coord[5], coord[3]]
-            X.append(mask_pancreas)
-            Y.append(0)
+            if mask_pancreas.shape == (patch_size, patch_size):
+                X.append(mask_pancreas)
+                Y.append(0)
+            else:
+                print("Size incorrect")
         for coord in les_coords:
             mask_pancreas = img_les[coord[1]:coord[4],
                                     coord[2]:coord[5], coord[3]]
-            X.append(mask_pancreas)
-            Y.append(1)
+            if mask_pancreas.shape == (patch_size, patch_size):
+                X.append(mask_pancreas)
+                Y.append(1)
+            else:
+                print("Size incorrect")
     return X, Y
 
 
