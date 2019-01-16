@@ -1,10 +1,15 @@
 import glob
+
 import pickle
 import numpy as np
 from sklearn.model_selection import train_test_split
 import torch
 from torch.utils import data
 import keras
+from skimage import morphology, measure
+import tqdm
+
+from data_loader.patch_sampler import patch_generator
 
 
 class Dataset_pytorch(data.Dataset):
@@ -78,16 +83,19 @@ class DataGenerator_keras(keras.utils.Sequence):
         n_channels=1 (int): number of image channel
         n_classes (int): number of classes
         shuffle (bool): if shuffle data on epoch ends
-	load_fn (func): loading function for images
+        load_fn (func): loading function for images
 
     Attributes:
         same as args
 
     """
 
-    def __init__(self, list_IDs, labels, patch_paths, batch_size=32, dim=(32, 32), n_channels=1,
+    def __init__(self, X_total, y_total, list_IDs, labels, patch_paths, batch_size=32, dim=(32, 32), n_channels=1,
                  n_classes=2, shuffle=False, load_fn=np.load):
         'Initialization'
+        self.X_total = X_total
+        self.y_total = y_total
+
         self.list_IDs = list_IDs
         self.labels = labels
         self.patch_paths = patch_paths
@@ -115,7 +123,8 @@ class DataGenerator_keras(keras.utils.Sequence):
         list_IDs_temp = [self.list_IDs[k] for k in indexes]
 
         # Generate data
-        X, y = self.__data_generation(list_IDs_temp)
+        X, y = self.__data_generation(indexes)
+        # X, y = self.__data_generation(list_IDs_temp)
 
         return X, y
 
@@ -125,7 +134,7 @@ class DataGenerator_keras(keras.utils.Sequence):
         if self.shuffle is True:
             np.random.shuffle(self.indexes)
 
-    def __data_generation(self, list_IDs_temp):
+    def __data_generation(self, indexes):
         # X : (n_samples, *dim, n_channels)
         'Generates data containing batch_size samples'
         # Initialization
@@ -133,14 +142,31 @@ class DataGenerator_keras(keras.utils.Sequence):
         y = np.empty((self.batch_size), dtype=int)
 
         # Generate data
-        for i, ID in enumerate(list_IDs_temp):
+        for i, index in enumerate(indexes):
             # Store sample
-            X[i, ] = self.load_fn(self.patch_paths[ID])[:, :, np.newaxis]  # channel last
+            X[i, ] = self.X_total[index]  # channel last
 
             # Store class
-            y[i] = self.labels[ID]
+            y[i] = self.y_total[index]
 
         return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
+
+    # def __data_generation(self, list_IDs_temp):
+    #     # X : (n_samples, *dim, n_channels)
+    #     'Generates data containing batch_size samples'
+    #     # Initialization
+    #     X = np.empty((self.batch_size, *self.dim, self.n_channels), dtype=np.float32)  # channel last
+    #     y = np.empty((self.batch_size), dtype=int)
+
+    #     # Generate data
+    #     for i, ID in enumerate(list_IDs_temp):
+    #         # Store sample
+    #         X[i, ] = self.load_fn(self.patch_paths[ID])[:, :, np.newaxis]  # channel last
+
+    #         # Store class
+    #         y[i] = self.labels[ID]
+
+    #     return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
 
 
 def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_seed=None):
@@ -178,6 +204,57 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_
     real_ratio = np.array(num_parts) / sum(num_parts)
     print('SPLIT_SAVE_CASE_PARTITION:\tActual Partition Ratio: (train, val, test)={}'.format(
         (real_ratio)))
+
+    print('SPLIT_SAVE_CASE_PARTITION:\tDone Partition')
+    # saving partition dict to disk
+    if path != "":
+        print('SPLIT_SAVE_CASE_PARTITION:\tStart saving partition dict to {}'.format(path))
+        with open(path, 'wb') as f:
+            pickle.dump(partition, f, pickle.HIGHEST_PROTOCOL)
+        print('SPLIT_SAVE_CASE_PARTITION:\tDone saving')
+
+    return partition
+
+
+def fix_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_seed=None):
+    """Fixing test case
+
+    TODO: ratio
+    Splting all cases to train, val, test part
+
+    If path is not empty str, partition dict is saved for reproducibility.
+
+    Args:
+        case_list (list): The list contains case name.
+        ratio (tup): Data split ratio. SHOULD sum to 1. (train, val, test) Defaults to (.8, .1, .1).
+        path (str): Path to Save the partition dict for reproducibility.
+        random_seed (int): Random Seed.
+
+
+    Returns:
+        dict:   Keys: {all, train, validation, test}
+                Values: list of cases
+
+    """
+
+    print('SPLIT_SAVE_CASE_PARTITION:\tStart spliting cases...')
+
+    # load case list and spilt to 3 part
+    partition = {}
+    partition['all'] = case_list
+    partition['test'] = ['NP4', 'NP8', 'NP2', 'NP9', 'NP10',
+                         'AD20', 'AD110', 'AD29', 'AD92', 'AD87',
+                         'PT13', 'PT35', 'PT2', 'PT36', 'PT42',
+                         'PC83', 'PC39', 'PC79', 'PC73', 'PC72']
+    partition['train'] = [i for i in partition['all'] if i not in partition['test']]
+    partition['train'], partition['validation'] = train_test_split(
+        partition['train'], test_size=ratio[1] / (ratio[0] + ratio[1]),
+        random_state=random_seed)
+
+    # report actual partition ratio
+    num_parts = list(map(len, [partition[part]
+                               for part in ['train', 'validation', 'test']]))
+    real_ratio = np.array(num_parts) / sum(num_parts)
 
     print('SPLIT_SAVE_CASE_PARTITION:\tDone Partition')
     # saving partition dict to disk
@@ -251,3 +328,17 @@ def get_patch_partition_labels(case_partition, pancreas_dir, lesion_dir):
                     labels[patch_id] = i
     print('GET_PATCH_PARTITION_LABELS:\tDone patch partition')
     return patch_partition, patch_paths, labels
+
+
+def load_patches(data_path, case_list, patch_size=50):
+    X_total = []
+    y_total = []
+    for ID in tqdm.tqdm(case_list):
+        X_tmp, y_tmp = patch_generator(data_path, ID, patch_size)
+        X_total.extend(X_tmp)
+        y_total.extend(y_tmp)
+    X = np.array(X_total)
+    X = X.reshape((X.shape[0], X.shape[1], X.shape[2], 1))
+    y = np.array(y_total)
+
+    return X, y
