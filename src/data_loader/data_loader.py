@@ -2,6 +2,7 @@ import glob
 
 import pickle
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 import torch
 from torch.utils import data
@@ -342,3 +343,22 @@ def load_patches(data_path, case_list, patch_size=50):
     y = np.array(y_total)
 
     return X, y
+
+
+def convert_csv_to_dict(csv_data_path):
+    """extract data list of train, validation, test from csv
+    csv_data_path = path to the csv file (ex: '/home/d/pancreas/raw_data/data_list.csv')
+    Returns:
+        dict:   Keys: {all, train, validation, test}
+                Values: list of patch id
+    """
+    final_split_df = pd.read_csv(csv_data_path)
+    data_list_dict = {}
+    data_list_dict['train'] = list(final_split_df[final_split_df['Class'] == 'train']['Number'])
+    data_list_dict['validation'] = list(final_split_df[final_split_df['Class'] == 'validation']['Number'])
+    data_list_dict['test'] = list(final_split_df[final_split_df['Class'] == 'test']['Number'])
+    data_list_dict['all'] = list(final_split_df[final_split_df['Class'] == 'train']['Number']) + \
+                            list(final_split_df[final_split_df['Class'] == 'validation']['Number']) + \
+                            list(final_split_df[final_split_df['Class'] == 'test']['Number'])
+    print('Finish converting csv to dict')
+    return data_list_dict
