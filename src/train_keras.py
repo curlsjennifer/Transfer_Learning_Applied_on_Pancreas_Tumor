@@ -9,10 +9,12 @@ import numpy as np
 import tensorflow as tf
 import keras
 from keras.backend.tensorflow_backend import set_session
+from keras.preprocessing.image import ImageDataGenerator
 from sklearn.metrics import f1_score, classification_report
 
 from models.net_keras import simple_cnn_keras
 from data_loader.data_loader import fix_save_case_partition, load_patches
+from data_loader.data_loader import convert_csv_to_dict
 from utils import get_config_sha1
 
 
@@ -41,11 +43,12 @@ experiment.add_tag('keras')
 experiment.add_tag(config['model'])
 
 # split cases into train, val, test
-case_list = os.listdir(config['case_list_dir'])
-case_partition = fix_save_case_partition(
-    case_list, config['case_split_ratio'], path=config['case_partition_path'],
-    random_seed=config['random_seed']) if config['case_partition_path'] == '' else load_case_partition(config['case_partition_path'])
+# case_list = os.listdir(config['case_list_dir'])
+# case_partition = fix_save_case_partition(
+#     case_list, config['case_split_ratio'], path=config['case_partition_path'],
+#     random_seed=config['random_seed']) if config['case_partition_path'] == '' else load_case_partition(config['case_partition_path'])
 
+case_partition = convert_csv_to_dict()
 # # Get patch partition
 # patch_partition, patch_paths, labels = get_patch_partition_labels(
 #     case_partition, config['patch_pancreas_dir'], config['patch_lesion_dir'])
@@ -55,11 +58,13 @@ patch_size = config['input_dim'][0]
 train_X, train_y = load_patches(config['case_list_dir'],
                                 case_partition['train'],
                                 patch_size=patch_size)
-print("Finish loading {} patches from {} studies".format(train_X.shape[0], len(case_partition['train'])))
+print("Finish loading {} patches from {} studies".format(
+    train_X.shape[0], len(case_partition['train'])))
 valid_X, valid_y = load_patches(config['case_list_dir'],
                                 case_partition['validation'],
                                 patch_size=patch_size)
-print("Finish loading {} patches from {} studies".format(valid_X.shape[0], len(case_partition['validation'])))
+print("Finish loading {} patches from {} studies".format(
+    valid_X.shape[0], len(case_partition['validation'])))
 test_X, test_y = load_patches(config['case_list_dir'],
                               case_partition['test'],
                               patch_size=patch_size)
@@ -73,7 +78,9 @@ train_y = keras.utils.to_categorical(train_y, num_classes=2)
 valid_y = keras.utils.to_categorical(valid_y, num_classes=2)
 test_y = keras.utils.to_categorical(test_y, num_classes=2)
 
-
+# datagen = ImageDataGenerator(rotation_range=20, horizontal_flip=True,
+                            #  width_shift_range=0.2, height_shift_range=0.2)
+# datagen.fit(train_X)
 # # Data Generators - Keras
 # training_generator = DataGenerator_keras(
 #     train_X, train_y,
@@ -103,6 +110,12 @@ cbs = [keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
 #                     workers=config['num_cpu'])
 
 with experiment.train():
+    # history = model.fit_generator(datagen.flow(train_X, train_y, batch_size=32),
+    #                               steps_per_epoch=len(train_X) // 32,
+    #                               epochs=config['epochs'],
+    #                               class_weight='auto',
+    #                               callbacks=cbs,
+    #                               validation_data=(valid_X, valid_y))
     history = model.fit(train_X,
                         train_y,
                         epochs=config['epochs'],
@@ -114,4 +127,4 @@ with experiment.train():
 with experiment.test():
     loss, accuracy = model.evaluate(test_X, test_y)
     experiment.log_metrics({'loss': loss,
-                            'accracy': accuracy})
+                            'accuracy': accuracy})
