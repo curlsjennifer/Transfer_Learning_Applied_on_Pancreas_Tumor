@@ -125,7 +125,8 @@ def create_boxdata(tumorpath, sortkey,
 
     category_cnt = tumor_label.shape[0] \
         if tumor_options['dimension'] == 4 else 1
-    category_names = [tumor_options['Segment{}_Name'.format(c)] for c in range(category_cnt)]
+    category_names = [tumor_options['Segment{}_Name'.format(c)]
+                      for c in range(category_cnt)]
 
     # Get pancreas label
     label = []
@@ -146,6 +147,8 @@ def create_boxdata(tumorpath, sortkey,
         save_name = standard_filename(category_name)
         label.append([save_name, category_label])
 
+    label = manual_change(tumor_id, label)
+
     if box_save_path:
         base_tumor_path = box_save_path + tumor_id + '/'
         if not os.path.exists(base_tumor_path):
@@ -162,7 +165,8 @@ def create_AD_boxdata(tumorpath, sortkey,
                       border=np.array([0, 0, 0]),
                       box_save_path='',
                       change_spacing=True,
-                      new_spacing=[1, 1, 5]):
+                      new_spacing=[1, 1, 5],
+                      crop_box=True):
     """
     Usage: Create box data from tumorpath and add border
 
@@ -230,11 +234,12 @@ def create_AD_boxdata(tumorpath, sortkey,
     xmin, ymin, zmin = np.min(index, axis=1)
     xmax, ymax, zmax = np.max(index, axis=1)
 
-    # box_img = patient_hu[xmin:xmax, ymin:ymax, zmin:zmax]
-    box_img = patient_hu
-
-    # box_pan = pancreas_lbl[xmin:xmax, ymin:ymax, zmin:zmax]
-    box_pan = pancreas_lbl
+    if crop_box:
+        box_img = patient_hu[xmin:xmax, ymin:ymax, zmin:zmax]
+        box_pan = pancreas_lbl[xmin:xmax, ymin:ymax, zmin:zmax]
+    else:
+        box_img = patient_hu
+        box_pan = pancreas_lbl
 
     if change_spacing:
         box_img, _ = resample(box_img, img_spacing, new_spacing)
@@ -252,9 +257,49 @@ def create_AD_boxdata(tumorpath, sortkey,
 
 
 def standard_filename(name):
+    """
+    Usage: Change the typo and inconsistant of label's name
+
+    Parameters
+    ----------
+    name (str): The string of label name
+
+    Returns
+    -------
+    string: The string after correction
+    """
     name = name.replace('-', '')
     name = name.replace('_', '')
     name = name.replace(' ', '')
     name = name.replace('1', '')
     name = name.lower()
     return name
+
+
+def manual_change(tumor_id, label):
+    """
+    Usage: Manually change of mistake in label
+
+    Parameters
+    ----------
+    tumor_id (str): The tumor id
+    label (list) : Method for sorting file name
+
+    Returns
+    -------
+    List: the list containing all the label.
+    """
+    if tumor_id in ['PT4', 'PT27', 'PT28', 'PT29', 'PT30', 'PT31']:
+        for item in label:
+            if item[0] == 'pancreas':
+                label.append(['lesion', item[1]])
+
+    if tumor_id == 'PT23':
+        for item in label:
+            item[0] = item[0].replace('segment2', 'lesion')
+
+    if tumor_id in ['PC49', 'PC50', 'PC132', 'PC242']:
+        for item in label:
+            item[0] = item[0].replace('mass', 'lesion')
+
+    return label
