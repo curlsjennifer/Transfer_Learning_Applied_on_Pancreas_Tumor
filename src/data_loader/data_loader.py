@@ -29,10 +29,11 @@ class Dataset_pytorch(data.Dataset):
 
     """
 
-    def __init__(self, case_list, data_path, patch_size, return_id=False):
+    def __init__(self, data_path, case_list, patch_size, return_id=False):
         self.case_list = case_list
         self.data_path = data_path
         self.patch_size = patch_size
+        self.return_id = return_id
 
         self.X, self.labels = load_patches(self.data_path,
                                            self.case_list,
@@ -46,7 +47,7 @@ class Dataset_pytorch(data.Dataset):
         Returns:
             int: number of data in this dataset
         """
-        return len(self.list_IDs)
+        return len(self.labels)
 
     def __getitem__(self, index):
         """Get a data in dataset
@@ -61,12 +62,9 @@ class Dataset_pytorch(data.Dataset):
             y (int): lable
 
         """
-        # Select sample
-        ID = self.list_IDs[index]
-
         # Load data and get label
         X = torch.from_numpy(self.X[index]).to(torch.float)  # channel first
-        y = torch.tensor(self.labels[index])
+        y = torch.tensor(self.labels[index]).to(torch.float)
 
         if self.return_id:
             return X, y, ID

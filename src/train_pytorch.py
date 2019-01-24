@@ -58,7 +58,7 @@ training_generator = data.DataLoader(
     training_set, batch_size=config['batch_size'],
     shuffle=True, num_workers=config['num_cpu'], pin_memory=True)
 
-training_set = Dataset_pytorch(config['case_list_dir'],
+validation_set = Dataset_pytorch(config['case_list_dir'],
                                case_partition['validation'],
                                config['input_dim'][0])
 validation_generator = data.DataLoader(
