@@ -16,8 +16,6 @@ from data_loader.patch_sampler import patch_generator
 class Dataset_pytorch(data.Dataset):
     """Pytorch Dataset for 2d patch image inheriting torch.utils.data.Dataset
 
-    Need multi-thread to avoid bottlebecking at Disk IO since images are read from disk.
-
     Args:
         list_IDs (list): List of patch IDs
         labels (dict): {patch_id : label}
@@ -31,12 +29,16 @@ class Dataset_pytorch(data.Dataset):
 
     """
 
-    def __init__(self, list_IDs, labels, patch_paths, load_fn=np.load, return_id=False):
-        self.labels = labels
-        self.list_IDs = list_IDs
-        self.patch_paths = patch_paths
-        self.load_fn = load_fn
-        self.return_id = return_id
+    def __init__(self, case_list, data_path, patch_size, return_id=False):
+        self.case_list = case_list
+        self.data_path = data_path
+        self.patch_size = patch_size
+
+        self.X, self.labels = load_patches(self.data_path,
+                                           self.case_list,
+                                           self.patch_size)
+        # convert to channel first
+        self.X = np.transpose(self.X, (0, 3, 1, 2))
 
     def __len__(self):
         """Get number of data in this dataset
@@ -63,9 +65,8 @@ class Dataset_pytorch(data.Dataset):
         ID = self.list_IDs[index]
 
         # Load data and get label
-        X = torch.from_numpy(self.load_fn(self.patch_paths[ID])[
-                             np.newaxis, :, :]).to(torch.float)  # channel first
-        y = torch.tensor(self.labels[ID]).to(torch.float)
+        X = torch.from_numpy(self.X[index]).to(torch.float)  # channel first
+        y = torch.tensor(self.labels[index])
 
         if self.return_id:
             return X, y, ID

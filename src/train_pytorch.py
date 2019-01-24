@@ -45,21 +45,25 @@ experiment.add_tag(config['patch_pancreas_dir'].split('/')[-2])
 
 # split cases into train, val, test
 case_list = os.listdir(config['case_list_dir'])
-case_partition = split_save_case_partition(case_list, config['case_split_ratio'], path=config['case_partition_path'],
-                                           test_cases=config['test_list'], random_seed=config['random_seed'])
-
-# Get patch partition
-patch_partition, patch_paths, labels = get_patch_partition_labels(
-    case_partition, config['patch_pancreas_dir'], config['patch_lesion_dir'])
+case_partition = split_save_case_partition(case_list, config['case_split_ratio'],
+                                           path=config['case_partition_path'],
+                                           test_cases=config['test_list'],
+                                           random_seed=config['random_seed'])
 
 # Data Generators
-training_set = Dataset_pytorch(patch_partition['train'], labels, patch_paths)
+training_set = Dataset_pytorch(config['case_list_dir'],
+                               case_partition['train'],
+                               config['input_dim'][0])
 training_generator = data.DataLoader(
-    training_set, batch_size=config['batch_size'], shuffle=True, num_workers=config['num_cpu'], pin_memory=True)
+    training_set, batch_size=config['batch_size'],
+    shuffle=True, num_workers=config['num_cpu'], pin_memory=True)
 
-validation_set = Dataset_pytorch(patch_partition['validation'], labels, patch_paths)
+training_set = Dataset_pytorch(config['case_list_dir'],
+                               case_partition['validation'],
+                               config['input_dim'][0])
 validation_generator = data.DataLoader(
-    validation_set, batch_size=config['val_batch_size'], shuffle=False, num_workers=config['num_cpu'], pin_memory=True)
+    validation_set, batch_size=config['val_batch_size'],
+    shuffle=False, num_workers=config['num_cpu'], pin_memory=True)
 
 # Model Init
 model = eval(config['model'])()
@@ -76,7 +80,8 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
         experiment.log_current_epoch(epoch)
         num_correct, num_count, running_loss, accu = 0.0, 0.0, 0.0, 0.0
         pbar = tqdm(enumerate(training_generator),
-                    desc='TRAIN loop', leave=False, total=len(training_generator))
+                    desc='TRAIN loop', leave=False,
+                    total=len(training_generator))
         for i, (local_batch, local_labels) in pbar:
             global_step += 1
             # Transfer to GPU
@@ -113,7 +118,8 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
             num_correct, num_count, running_loss = 0., 0., 0.
             pred = torch.tensor([])
             Y = torch.tensor([])
-            for local_batch, local_labels in tqdm(validation_generator, desc='VAL loop', leave=False):
+            for local_batch, local_labels in tqdm(validation_generator,
+                                                  desc='VAL loop', leave=False):
                 # Transfer to GPU
                 local_batch, local_labels = local_batch.to(
                     device), local_labels.to(device)
