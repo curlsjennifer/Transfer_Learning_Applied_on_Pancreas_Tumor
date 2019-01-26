@@ -1,10 +1,11 @@
 from comet_ml import Experiment
+import argparse
 import sys
 import os
 import time
+from time import gmtime, strftime
 from random import shuffle
 from pprint import pprint
-from ast import literal_eval
 from tqdm import trange, tqdm
 
 import torch
@@ -14,24 +15,26 @@ from sklearn.metrics import f1_score, classification_report
 
 from models.net_pytorch import pred_to_01
 from models.net_pytorch import *
-from data_loader.data_loader import split_save_case_partition, load_case_partition, get_patch_partition_labels, Dataset_pytorch
-from utils import get_config_sha1
+from data_loader.data_loader import Dataset_pytorch, convert_csv_to_dict
+from utils import get_config_sha1, load_config, flatten_config_for_logging
 
+
+# Parse Args
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--config", default='./configs/base.yml', type=str, help="train configuration")
+parser.add_argument("-r", "--run_name", default=None, type=str, help="run name for this experiment. (Default: time)")
+args = parser.parse_args()
 
 # Load config
-with open(sys.argv[1], 'r') as f:
-    config = literal_eval(f.read())
-    config['config_sha1'] = get_config_sha1(config, 5)
-    config['log_interval'] = 10
-    config['lr'] = 1e-5
-    config['checkpoint_dir'] = './ckpt/'
-    config['run_name'] = 'test'
-    pprint(config)
+config = load_config(args.config)
+if args.run_name is None:
+    config['run_name'] = strftime("%Y%m%d_%H%M%S", gmtime())
+pprint(config)
 
 # Env settings
-os.environ["CUDA_VISIBLE_DEVICES"] = config['CUDA_VISIBLE_DEVICES']
-if not os.path.isdir(os.path.join(config['checkpoint_dir'], config['run_name'])):
-    os.mkdir(os.path.join(config['checkpoint_dir'], config['run_name']))
+os.environ["CUDA_VISIBLE_DEVICES"] = config['system']['CUDA_VISIBLE_DEVICES']
+if not os.path.isdir(os.path.join(config['log']['checkpoint_dir'], config['run_name'])):
+    os.mkdir(os.path.join(config['log']['checkpoint_dir'], config['run_name']))
 # check availability of GPU
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -39,41 +42,37 @@ device = torch.device(
 # Record experiment in Comet.ml
 experiment = Experiment(api_key="fdb4jkVkz4zT8vtOYIRIb0XG7",
                         project_name="pancreas-2d", workspace="adamlin120")
-experiment.log_parameters(config)
-experiment.add_tag(config['model'])
-experiment.add_tag(config['patch_pancreas_dir'].split('/')[-2])
+experiment.log_parameters(flatten_config_for_logging(config))
+experiment.add_tag(config['model']['name'])
+experiment.add_tag(config['dataset']['dir'].split('/')[-1])
 
-# split cases into train, val, test
-case_list = os.listdir(config['case_list_dir'])
-case_partition = split_save_case_partition(case_list, config['case_split_ratio'],
-                                           path=config['case_partition_path'],
-                                           test_cases=config['test_list'],
-                                           random_seed=config['random_seed'])
+# load case partition
+case_partition = convert_csv_to_dict(config['dataset']['csv'])
 
 # Data Generators
-training_set = Dataset_pytorch(config['case_list_dir'],
+training_set = Dataset_pytorch(config['dataset']['dir'],
                                case_partition['train'],
-                               config['input_dim'][0])
+                               config['dataset']['input_dim'][0])
 training_generator = data.DataLoader(
-    training_set, batch_size=config['batch_size'],
-    shuffle=True, num_workers=config['num_cpu'], pin_memory=True)
+    training_set, batch_size=config['train']['batch_size'],
+    shuffle=True, num_workers=config['system']['num_cpu'], pin_memory=True)
 
-validation_set = Dataset_pytorch(config['case_list_dir'],
+validation_set = Dataset_pytorch(config['dataset']['dir'],
                                case_partition['validation'],
-                               config['input_dim'][0])
+                               config['dataset']['input_dim'][0])
 validation_generator = data.DataLoader(
-    validation_set, batch_size=config['val_batch_size'],
-    shuffle=False, num_workers=config['num_cpu'], pin_memory=True)
+    validation_set, batch_size=config['validation']['batch_size'],
+    shuffle=False, num_workers=config['system']['num_cpu'], pin_memory=True)
 
 # Model Init
-model = eval(config['model'])()
+model = eval(config['model']['name'])()
 model = model.to(device)
-optim = torch.optim.Adam(model.parameters(), lr=config['lr'])
+optim = torch.optim.Adam(model.parameters(), lr=config['optimizer']['lr'])
 criterion = nn.BCELoss()
 
 # Loop over epochs
 global_step = 0
-for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
+for epoch in trange(config['train']['epochs'], desc='EPOCH loop', leave=False):
     # Training
     with experiment.train():
         model.train()
@@ -100,7 +99,7 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
             num_correct += (y_pred_class.clone().detach().cpu()
                             == local_labels.clone().detach().cpu()).sum()
             num_count += len(local_labels)
-            if global_step % config['log_interval'] == 0:
+            if global_step % config['log']['log_interval'] == 0:
                 accu = float(num_correct) / num_count
                 f1 = f1_score(local_labels.clone().detach().cpu(
                 ), y_pred_class.clone().detach().cpu(), average='macro')
@@ -112,7 +111,7 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
             pbar.update(1)
 
     # Validation
-    with experiment.test():
+    with experiment.validate():
         with torch.set_grad_enabled(False):
             model.eval()
             num_correct, num_count, running_loss = 0., 0., 0.
@@ -151,4 +150,4 @@ for epoch in trange(config['epochs'], desc='EPOCH loop', leave=False):
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optim.state_dict()
-        }, os.path.join(config['checkpoint_dir'], config['run_name'],'{}_{}_{}.pt'.format(int(time.time()), epoch, global_step)))
+        }, os.path.join(config['log']['checkpoint_dir'], config['run_name'],'{}_{}_{}.pt'.format(int(time.time()), epoch, global_step)))

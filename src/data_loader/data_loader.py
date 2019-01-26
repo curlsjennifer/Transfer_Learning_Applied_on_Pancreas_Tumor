@@ -369,8 +369,6 @@ def convert_csv_to_dict(csv_data_path):
     data_list_dict['train'] = list(final_split_df[final_split_df['Class'] == 'train']['Number'])
     data_list_dict['validation'] = list(final_split_df[final_split_df['Class'] == 'validation']['Number'])
     data_list_dict['test'] = list(final_split_df[final_split_df['Class'] == 'test']['Number'])
-    data_list_dict['all'] = list(final_split_df[final_split_df['Class'] == 'train']['Number']) + \
-                            list(final_split_df[final_split_df['Class'] == 'validation']['Number']) + \
-                            list(final_split_df[final_split_df['Class'] == 'test']['Number'])
+    data_list_dict['all'] = data_list_dict['train'] + data_list_dict['validation'] + data_list_dict['test']
     print('Finish converting csv to dict')
     return data_list_dict
