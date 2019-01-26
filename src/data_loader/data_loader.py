@@ -13,6 +13,35 @@ import tqdm
 from data_loader.patch_sampler import patch_generator
 
 
+def getDataloader(config):
+    case_partition = convert_csv_to_dict(config['dataset']['csv'])
+
+    training_set = Dataset_pytorch(config['dataset']['dir'],
+                               case_partition['train'],
+                               config['dataset']['input_dim'][0])
+    training_generator = data.DataLoader(
+        training_set, batch_size=config['train']['batch_size'],
+        shuffle=True, num_workers=config['system']['num_cpu'], pin_memory=True)
+
+    validation_set = Dataset_pytorch(config['dataset']['dir'],
+                                case_partition['validation'],
+                                config['dataset']['input_dim'][0])
+    validation_generator = data.DataLoader(
+        validation_set, batch_size=config['validation']['batch_size'],
+        shuffle=False, num_workers=config['system']['num_cpu'], pin_memory=True)
+
+    test_set = Dataset_pytorch(config['dataset']['dir'],
+                            case_partition['test'],
+                            config['dataset']['input_dim'][0])
+    test_generator = data.DataLoader(
+        test_set, batch_size=config['validation']['batch_size'],
+        shuffle=False, num_workers=config['system']['num_cpu'], pin_memory=True)
+
+    dataloaders = {'train': training_generator, 'val': validation_generator, 'test': test_generator}
+
+    return dataloaders
+
+
 class Dataset_pytorch(data.Dataset):
     """Pytorch Dataset for 2d patch image inheriting torch.utils.data.Dataset
 

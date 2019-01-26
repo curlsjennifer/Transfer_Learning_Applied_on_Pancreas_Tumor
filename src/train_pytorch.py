@@ -15,7 +15,7 @@ from sklearn.metrics import f1_score, classification_report
 
 from models.net_pytorch import pred_to_01
 from models.net_pytorch import *
-from data_loader.data_loader import Dataset_pytorch, convert_csv_to_dict
+from data_loader.data_loader import getDataloader
 from utils import get_config_sha1, load_config, flatten_config_for_logging
 
 
@@ -46,23 +46,8 @@ experiment.log_parameters(flatten_config_for_logging(config))
 experiment.add_tag(config['model']['name'])
 experiment.add_tag(config['dataset']['dir'].split('/')[-1])
 
-# load case partition
-case_partition = convert_csv_to_dict(config['dataset']['csv'])
-
-# Data Generators
-training_set = Dataset_pytorch(config['dataset']['dir'],
-                               case_partition['train'],
-                               config['dataset']['input_dim'][0])
-training_generator = data.DataLoader(
-    training_set, batch_size=config['train']['batch_size'],
-    shuffle=True, num_workers=config['system']['num_cpu'], pin_memory=True)
-
-validation_set = Dataset_pytorch(config['dataset']['dir'],
-                               case_partition['validation'],
-                               config['dataset']['input_dim'][0])
-validation_generator = data.DataLoader(
-    validation_set, batch_size=config['validation']['batch_size'],
-    shuffle=False, num_workers=config['system']['num_cpu'], pin_memory=True)
+# Dataset
+dataloaders = getDataloader(config)
 
 # Model Init
 model = eval(config['model']['name'])()
@@ -73,81 +58,56 @@ criterion = nn.BCELoss()
 # Loop over epochs
 global_step = 0
 for epoch in trange(config['train']['epochs'], desc='EPOCH loop', leave=False):
-    # Training
-    with experiment.train():
-        model.train()
-        experiment.log_current_epoch(epoch)
-        num_correct, num_count, running_loss, accu = 0.0, 0.0, 0.0, 0.0
-        pbar = tqdm(enumerate(training_generator),
-                    desc='TRAIN loop', leave=False,
-                    total=len(training_generator))
-        for i, (local_batch, local_labels) in pbar:
-            global_step += 1
-            # Transfer to GPU
-            local_batch, local_labels = local_batch.to(
-                device), local_labels.to(device)
-
-            # Model computations
-            optim.zero_grad()
-            y_pred = model(local_batch).view(len(local_labels))
-            loss = criterion(y_pred, local_labels)
-            loss.backward()
-            optim.step()
-
-            running_loss += loss.item() / len(local_labels)
-            y_pred_class = pred_to_01(y_pred)
-            num_correct += (y_pred_class.clone().detach().cpu()
-                            == local_labels.clone().detach().cpu()).sum()
-            num_count += len(local_labels)
-            if global_step % config['log']['log_interval'] == 0:
-                accu = float(num_correct) / num_count
-                f1 = f1_score(local_labels.clone().detach().cpu(
-                ), y_pred_class.clone().detach().cpu(), average='macro')
-                experiment.log_metric("loss", running_loss, step=global_step)
-                experiment.log_metric("accuracy", accu, step=global_step)
-                experiment.log_metric("f1", f1, step=global_step)
-                pbar.set_postfix({'loss': running_loss, 'accuracy': accu, 'f1': f1})
-                num_correct, num_count, running_loss = 0.0, 0.0, 0.0
-            pbar.update(1)
-
-    # Validation
-    with experiment.validate():
-        with torch.set_grad_enabled(False):
+    experiment.log_current_epoch(epoch)
+    for phase in ['train', 'val']:
+        isTrain = phase == 'train'
+        if isTrain:
+            model.train()
+        else:
             model.eval()
-            num_correct, num_count, running_loss = 0., 0., 0.
-            pred = torch.tensor([])
-            Y = torch.tensor([])
-            for local_batch, local_labels in tqdm(validation_generator,
-                                                  desc='VAL loop', leave=False):
-                # Transfer to GPU
-                local_batch, local_labels = local_batch.to(
-                    device), local_labels.to(device)
 
-                # Model computations
+        running_loss = 0.0
+        running_corrects = 0
+
+        pbar = tqdm(enumerate(dataloaders[phase]),
+                    desc='{} loop'.format(phase), leave=False,
+                    total=len(dataloaders[phase]))
+
+        for i, (local_batch, local_labels) in pbar:
+            local_batch = local_batch.to(device)
+            local_labels = local_labels.to(device)
+            optim.zero_grad()
+            with torch.set_grad_enabled(isTrain):
                 y_pred = model(local_batch).view(len(local_labels))
                 loss = criterion(y_pred, local_labels)
+                if isTrain:
+                    global_step += 1
+                    loss.backward()
+                    optim.step()
 
-                running_loss += loss.item() / len(local_labels)
-                y_pred_class = pred_to_01(y_pred)
-                num_correct += (y_pred_class.clone().detach().cpu()
-                                == local_labels.clone().detach().cpu()).sum()
-                num_count += len(local_labels)
+            y_pred_class = pred_to_01(y_pred)
+            accu = torch.sum(y_pred_class == local_labels.data).double() / len(y_pred_class)
 
-                pred = torch.cat((pred, y_pred_class.clone().detach().cpu()))
-                Y = torch.cat((Y, local_labels.clone().detach().cpu()))
-            accu = float(num_correct) / num_count
-            f1 = f1_score(Y.clone().detach().cpu(),
-                          pred.clone().detach().cpu(), average='macro')
-            tqdm.write('\nEPOCH: {}  VALADATION Loss: {}  Accu: {} F1: {}\n'.format(
-                epoch, running_loss, accu, f1))
-            tqdm.write(classification_report(Y, pred, target_names=['pancreas', 'leison']))
-            experiment.log_metric("loss", running_loss, step=global_step)
-            experiment.log_metric("accuracy", accu, step=global_step)
-            experiment.log_metric("f1", f1, step=global_step)
+            running_loss += loss.detach().item() * local_batch.size(0)
+            running_corrects += accu * len(y_pred_class)
 
-    torch.save({
-        'config': config,
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optim.state_dict()
-        }, os.path.join(config['log']['checkpoint_dir'], config['run_name'],'{}_{}_{}.pt'.format(int(time.time()), epoch, global_step)))
+            if isTrain and global_step % config['log']['log_interval'] == 0:
+                experiment.log_metric(phase + "_loss", loss.detach().item(), step=global_step)
+                experiment.log_metric(phase + "_accuracy", accu, step=global_step)
+                pbar.set_postfix({'loss':  loss.detach().item(), 'accuracy': accu.item()})
+            pbar.update(1)
+
+        epoch_loss = running_loss / len(dataloaders[phase].dataset)
+        epoch_accu = running_corrects.double() / len(dataloaders[phase].dataset)
+        tqdm.write('\nEPOCH: {}  VALADATION Loss: {}  Accu: {}\n'.format(epoch, running_loss, accu))
+
+        if not isTrain:
+            experiment.log_metric(phase + "_loss", epoch_loss, step=global_step)
+            experiment.log_metric(phase + "_accuracy", epoch_accu, step=global_step)
+            torch.save({
+                        'config': config,
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optim.state_dict()
+                        },
+                        os.path.join(config['log']['checkpoint_dir'], config['run_name'],'{}_{}_{}.pt'.format(strftime("%Y%m%d_%H%M%S", gmtime()), epoch, global_step)))
