@@ -2,7 +2,7 @@ dataset:
   csv: /home/d/pancreas/raw_data/data_list.csv
   dir: /home/d/pancreas/box_data
   input_dim: [50, 50, 1]
-log: {checkpoint_dir: ./ckpt, log_interval: 10}
+log: {checkpoint_dir: ../models/, log_interval: 10}
 model: {name: Inception}
 optimizer: {lr: 1e-05}
 system: {CUDA_VISIBLE_DEVICES: '1', num_cpu: 10, random_seed: 13}

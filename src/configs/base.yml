@@ -5,7 +5,7 @@ system:
 
 log:
     log_interval: 10
-    checkpoint_dir: './ckpt'
+    checkpoint_dir: '../models/'
 
 model: 
     name: 'Inception'
