@@ -43,8 +43,8 @@ device = torch.device(
 experiment = Experiment(api_key="fdb4jkVkz4zT8vtOYIRIb0XG7",
                         project_name="pancreas-2d", workspace="adamlin120")
 experiment.log_parameters(flatten_config_for_logging(config))
-experiment.add_tag(config['model']['name'])
-experiment.add_tag(config['dataset']['dir'].split('/')[-1])
+experiment.add_tags([config['model']['name'], config['dataset']['dir'].split('/')[-1]])
+experiment.log_asset(file_path=args.config)
 
 # Dataset
 dataloaders = getDataloader(config)
@@ -55,11 +55,14 @@ model = model.to(device)
 optim = torch.optim.Adam(model.parameters(), lr=config['optimizer']['lr'])
 criterion = nn.BCELoss()
 
-# Loop over epochs
+# Train & Validate & Test
 global_step = 0
 for epoch in trange(config['train']['epochs'], desc='EPOCH loop', leave=False):
     experiment.log_current_epoch(epoch)
-    for phase in ['train', 'val']:
+    for phase in ['train', 'val', 'test']:
+        if phase == 'test' and epoch != config['train']['epochs']-1:
+            continue
+
         isTrain = phase == 'train'
         if isTrain:
             model.train()
@@ -86,15 +89,15 @@ for epoch in trange(config['train']['epochs'], desc='EPOCH loop', leave=False):
                     optim.step()
 
             y_pred_class = pred_to_01(y_pred)
-            accu = torch.sum(y_pred_class == local_labels.data).double() / len(y_pred_class)
+            accu = torch.sum(y_pred_class == local_labels).double() / len(y_pred_class)
 
-            running_loss += loss.detach().item() * local_batch.size(0)
+            running_loss += loss.item() * local_batch.size(0)
             running_corrects += accu * len(y_pred_class)
 
-            if isTrain and global_step % config['log']['log_interval'] == 0:
-                experiment.log_metric(phase + "_loss", loss.detach().item(), step=global_step)
+            if isTrain and (global_step % config['log']['log_interval'] == 0 or i == len(dataloaders[phase])-1):
+                experiment.log_metric(phase + "_loss", loss.item(), step=global_step)
                 experiment.log_metric(phase + "_accuracy", accu, step=global_step)
-                pbar.set_postfix({'loss':  loss.detach().item(), 'accuracy': accu.item()})
+                pbar.set_postfix({'loss':  loss.item(), 'accuracy': accu.item()})
             pbar.update(1)
 
         epoch_loss = running_loss / len(dataloaders[phase].dataset)
