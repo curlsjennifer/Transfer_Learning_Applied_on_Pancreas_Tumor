@@ -121,7 +121,8 @@ class DataGenerator_keras(keras.utils.Sequence):
     def __getitem__(self, index):
         'Generate one batch of data'
         # Generate indexes of the batch
-        indexes = self.indexes[index * self.batch_size:(index + 1) * self.batch_size]
+        indexes = self.indexes[index *
+                               self.batch_size:(index + 1) * self.batch_size]
 
         # Find list of IDs
         list_IDs_temp = [self.list_IDs[k] for k in indexes]
@@ -142,7 +143,8 @@ class DataGenerator_keras(keras.utils.Sequence):
         # X : (n_samples, *dim, n_channels)
         'Generates data containing batch_size samples'
         # Initialization
-        X = np.empty((self.batch_size, *self.dim, self.n_channels), dtype=np.float32)  # channel last
+        X = np.empty((self.batch_size, *self.dim, self.n_channels),
+                     dtype=np.float32)  # channel last
         y = np.empty((self.batch_size), dtype=int)
 
         # Generate data
@@ -210,7 +212,8 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path=None, test_
         partition['test'] = []
         partition['train'] = list(set(case_list) - set(test_cases))
     else:
-        raise TypeError("test_cases expected to be \"list\", instead got {}".format(type(test_cases)))
+        raise TypeError(
+            "test_cases expected to be \"list\", instead got {}".format(type(test_cases)))
 
     # report actual partition ratio
     num_parts = list(map(len, [partition[part]
@@ -260,7 +263,8 @@ def fix_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_se
                          'AD20', 'AD110', 'AD29', 'AD92', 'AD87',
                          'PT13', 'PT35', 'PT2', 'PT36', 'PT42',
                          'PC83', 'PC39', 'PC79', 'PC73', 'PC72']
-    partition['train'] = [i for i in partition['all'] if i not in partition['test']]
+    partition['train'] = [i for i in partition['all']
+                          if i not in partition['test']]
     partition['train'], partition['validation'] = train_test_split(
         partition['train'], test_size=ratio[1] / (ratio[0] + ratio[1]),
         random_state=random_seed)
@@ -344,11 +348,12 @@ def get_patch_partition_labels(case_partition, pancreas_dir, lesion_dir):
     return patch_partition, patch_paths, labels
 
 
-def load_patches(data_path, case_list, patch_size=50):
+def load_patches(data_path, case_list, patch_size=50, train_mode=True):
     X_total = []
     y_total = []
     for ID in tqdm.tqdm(case_list):
-        X_tmp, y_tmp = patch_generator(data_path, ID, patch_size)
+        X_tmp, y_tmp = patch_generator(
+            data_path, ID, patch_size, train_mode=train_mode)
         X_total.extend(X_tmp)
         y_total.extend(y_tmp)
     X = np.array(X_total)
@@ -358,7 +363,7 @@ def load_patches(data_path, case_list, patch_size=50):
     return X, y
 
 
-def convert_csv_to_dict(csv_data_path):
+def convert_csv_to_dict(csv_data_path='/home/d/pancreas/raw_data/data_list.csv'):
     """extract data list of train, validation, test from csv
     csv_data_path = path to the csv file (ex: '/home/d/pancreas/raw_data/data_list.csv')
     Returns:
@@ -367,11 +372,14 @@ def convert_csv_to_dict(csv_data_path):
     """
     final_split_df = pd.read_csv(csv_data_path)
     data_list_dict = {}
-    data_list_dict['train'] = list(final_split_df[final_split_df['Class'] == 'train']['Number'])
-    data_list_dict['validation'] = list(final_split_df[final_split_df['Class'] == 'validation']['Number'])
-    data_list_dict['test'] = list(final_split_df[final_split_df['Class'] == 'test']['Number'])
+    data_list_dict['train'] = list(
+        final_split_df[final_split_df['Class'] == 'train']['Number'])
+    data_list_dict['validation'] = list(
+        final_split_df[final_split_df['Class'] == 'validation']['Number'])
+    data_list_dict['test'] = list(
+        final_split_df[final_split_df['Class'] == 'test']['Number'])
     data_list_dict['all'] = list(final_split_df[final_split_df['Class'] == 'train']['Number']) + \
-                            list(final_split_df[final_split_df['Class'] == 'validation']['Number']) + \
-                            list(final_split_df[final_split_df['Class'] == 'test']['Number'])
+        list(final_split_df[final_split_df['Class'] == 'validation']['Number']) + \
+        list(final_split_df[final_split_df['Class'] == 'test']['Number'])
     print('Finish converting csv to dict')
     return data_list_dict
