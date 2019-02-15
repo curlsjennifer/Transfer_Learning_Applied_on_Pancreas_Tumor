@@ -6,13 +6,14 @@ system:
 
 log:
     log_interval: 10
-    checkpoint_dir: '../models/'
+    checkpoint_dir: '../log/'
+    model_dir: '../models/'
 
-model: 
+model:  
     name: 'simple_cnn_sigmoid_keras'
 
 optimizer:
-    lr: +1e-5
+    lr: +1e-3 # default: +1e-3
 
 train:
     epochs: 5
@@ -25,3 +26,8 @@ dataset:
     dir: '/home/d/pancreas/box_data'
     csv: '/home/d/pancreas/raw_data/data_list.csv'
     input_dim: [50, 50, 1]  # HWC
+
+comet:
+    api_key: 'vxjwm9gKFuiJaYpfHDBto3EgN'
+    project_name: 'general'
+    workspace: 'tinghui'
