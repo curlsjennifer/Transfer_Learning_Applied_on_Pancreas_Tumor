@@ -236,6 +236,6 @@ class SE_Res_block(nn.Module):
 
 
 def pred_to_01(pred):
-    pred_class = (np.sign(pred.detach().clone().cpu()-0.5)+1)/2
+    pred_class = (torch.sign(pred.detach() - 0.5) + 1) / 2
     pred_class[pred_class == 0.5] = 1
     return pred_class

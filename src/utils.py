@@ -1,4 +1,6 @@
+import collections
 import hashlib
+import ruamel.yaml
 from keras import backend as K
 
 
@@ -66,3 +68,33 @@ def f1_keras_metric(y_true, y_pred):
     recall = recall(y_true, y_pred)
     return 2*((precision*recall)/(precision+recall+K.epsilon()))
 
+
+def load_config(path):
+    """load YAML config
+
+    Args:
+        path: path to config.
+
+    Returns:
+        config: dict
+
+    """
+
+    with open(path, 'r', encoding='utf-8') as f:
+        config = ruamel.yaml.safe_load(f)
+    config['config_sha1'] = get_config_sha1(config, 5)
+
+    return config
+
+
+def flatten_config_for_logging(d, parent_key='', sep='_'):
+    """Flatten the nested dict to logging in comet-ml"""
+
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten_config_for_logging(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
