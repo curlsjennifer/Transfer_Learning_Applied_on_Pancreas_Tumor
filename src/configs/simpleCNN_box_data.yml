@@ -1,5 +1,5 @@
 system:
-    CUDA_VISIBLE_DEVICES: '7'
+    CUDA_VISIBLE_DEVICES: '0'
     GPU_memory_fraction: 0.5
     num_cpu: 10
     random_seed: 13
@@ -8,6 +8,7 @@ log:
     log_interval: 10
     checkpoint_dir: '../log/'
     model_dir: '../models/'
+    result_dir: '../result/'
 
 model:  
     name: 'simple_cnn_sigmoid_keras'
@@ -16,8 +17,8 @@ optimizer:
     lr: +1e-3 # default: +1e-3
 
 train:
-    epochs: 5
-    batch_size: 32
+    epochs: 200
+    batch_size: 128
 
 validation:
     batch_size: 512
