@@ -173,10 +173,10 @@ def draw_heatmap(img,
                  ismask=False,
                  alpha=0.5):
     fig, axs = plt.subplots(1, 4, figsize=(16, 10))
-    axs[0].imshow(img[:, :, z], cmap='gray')
-    axs[1].imshow(img[:, :, z], cmap='gray')
-    axs[2].imshow(img[:, :, z], cmap='gray')
-    axs[3].imshow(img[:, :, z], cmap='gray')
+    axs[0].imshow(img[:, :, z].T, cmap='gray')
+    axs[1].imshow(img[:, :, z].T, cmap='gray')
+    axs[2].imshow(img[:, :, z].T, cmap='gray')
+    axs[3].imshow(img[:, :, z].T, cmap='gray')
     pan = pancreas[:, :, z]
     pan_mask = pan > 0
     pan_img = np.stack([
@@ -184,7 +184,7 @@ def draw_heatmap(img,
         np.zeros(pan_mask.shape), pan, pan_mask * alpha
     ],
                        axis=-1)
-    axs[0].imshow(pan_img)
+    axs[0].imshow(pan_img.transpose(1, 0, 2))
     # gound truth use green
     gt = ground_truth[:, :, z]
     gt_mask = gt == 1
@@ -195,7 +195,7 @@ def draw_heatmap(img,
         np.zeros(gt_mask.shape), gt_mask * alpha
     ],
                       axis=-1)
-    axs[1].imshow(gt_img)
+    axs[1].imshow(gt_img.transpose(1, 0, 2))
     pd = prediction[:, :, z]
     pd_mask = pd >= threshold
     if ismask:
@@ -207,7 +207,7 @@ def draw_heatmap(img,
         np.zeros(pd_mask.shape), pd_mask * alpha
     ],
                       axis=-1)
-    axs[2].imshow(pd_img)
+    axs[2].imshow(pd_img.transpose(1, 0, 2))
 
     pan_bd = morphology.dilation(pan_mask, np.ones((5, 5))) ^ pan_mask
     gt_bd = morphology.dilation(gt_mask, np.ones((5, 5))) ^ gt_mask
@@ -226,8 +226,8 @@ def draw_heatmap(img,
          np.zeros(pd_bd.shape),
          np.zeros(pd_bd.shape), pd_bd * alpha],
         axis=-1)
-    axs[3].imshow(pan_bd_img)
-    axs[3].imshow(gt_bd_img)
-    axs[3].imshow(pd_bd_img)
-    axs[2].imshow(pan_bd_img)
-    axs[1].imshow(pan_bd_img)
+    axs[3].imshow(pan_bd_img.transpose(1, 0, 2))
+    axs[3].imshow(gt_bd_img.transpose(1, 0, 2))
+    axs[3].imshow(pd_bd_img.transpose(1, 0, 2))
+    axs[2].imshow(pan_bd_img.transpose(1, 0, 2))
+    axs[1].imshow(pan_bd_img.transpose(1, 0, 2))
