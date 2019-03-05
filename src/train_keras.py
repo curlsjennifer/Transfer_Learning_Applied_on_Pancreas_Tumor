@@ -1,117 +1,129 @@
-from comet_ml import Experiment
 import os
-from random import shuffle
 from pprint import pprint
-from ast import literal_eval
-from tqdm import trange, tqdm
+import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
+import argparse
+from time import gmtime, strftime
+from comet_ml import Experiment
 
 import tensorflow as tf
 import keras
 from keras.backend.tensorflow_backend import set_session
-from sklearn.metrics import f1_score, classification_report
+from keras.preprocessing.image import ImageDataGenerator
+from sklearn.metrics import confusion_matrix, roc_curve
 
-from models.net_keras import simple_cnn_keras
-from data_loader.data_loader import fix_save_case_partition, load_patches
-from utils import get_config_sha1
+from utils import load_config, flatten_config_for_logging
+from data_loader.data_loader import (convert_csv_to_dict,
+                                     load_patches)
+from models.net_keras import *
+from data_description.visualization import show_train_history
 
+plt.switch_backend('agg')
+
+# Parse Args
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--config", default='./configs/base.yml',
+                    type=str, help="train configuration")
+parser.add_argument("-r", "--run_name", default=None, type=str,
+                    help="run name for this experiment. (Default: time)")
+parser.add_argument("-comet", "--comet_implement", default=False,
+                    type=bool, help="record log in comet")
+args = parser.parse_args()
 
 # Load config
-with open('./configs/config_tinghui.txt', 'r') as f:
-    config = literal_eval(f.read())
-    config['config_sha1'] = get_config_sha1(config, 5)
-    pprint(config)
+config = load_config(args.config)
+if args.run_name is None:
+    config['run_name'] = strftime("%Y%m%d_%H%M%S", gmtime())
+else:
+    config['run_name'] = args.run_name
+pprint(config)
 
-# Env settings
-os.environ["CUDA_VISIBLE_DEVICES"] = config['CUDA_VISIBLE_DEVICES']
-# Session config, limiting gpu memory - Keras
-# sess_config = tf.ConfigProto()
-# sess_config.gpu_options.per_process_gpu_memory_fraction = config['GPU_memory_fraction']
-
-gpu_options = tf.GPUOptions(allow_growth=True)
-sess_config = tf.ConfigProto(gpu_options=gpu_options)
-
-set_session(tf.Session(config=sess_config))
+log_path = os.path.join(config['log']['checkpoint_dir'], config['run_name'])
+if not os.path.isdir(log_path):
+    os.mkdir(log_path)
+model_path = os.path.join(config['log']['model_dir'], config['run_name'])
+if not os.path.isdir(model_path):
+    os.mkdir(log_path)
 
 # Record experiment in Comet.ml
-experiment = Experiment(api_key="vxjwm9gKFuiJaYpfHDBto3EgN",
-                        project_name="general", workspace="tinghui")
-experiment.log_parameters(config)
-experiment.add_tag('keras')
-experiment.add_tag(config['model'])
+if args.comet_implement:
+    experiment = Experiment(api_key=config['comet']['api_key'],
+                            project_name=config['comet']['project_name'],
+                            workspace=config['comet']['workspace'])
+    experiment.log_parameters(flatten_config_for_logging(config))
+    experiment.add_tags(
+        [config['model']['name'], config['dataset']['dir'].split('/')[-1]])
+    experiment.log_asset(file_path=args.config)
+
+
+# Env settings
+os.environ["CUDA_VISIBLE_DEVICES"] = config['system']['CUDA_VISIBLE_DEVICES']
+gpu_options = tf.GPUOptions(allow_growth=True)
+sess_config = tf.ConfigProto(gpu_options=gpu_options)
+set_session(tf.Session(config=sess_config))
 
 # split cases into train, val, test
-case_list = os.listdir(config['case_list_dir'])
-case_partition = fix_save_case_partition(
-    case_list, config['case_split_ratio'], path=config['case_partition_path'],
-    random_seed=config['random_seed']) if config['case_partition_path'] == '' else load_case_partition(config['case_partition_path'])
-
-# # Get patch partition
-# patch_partition, patch_paths, labels = get_patch_partition_labels(
-#     case_partition, config['patch_pancreas_dir'], config['patch_lesion_dir'])
+case_partition = convert_csv_to_dict()
 
 # Get patches
-patch_size = config['input_dim'][0]
-train_X, train_y = load_patches(config['case_list_dir'],
-                                case_partition['train'],
-                                patch_size=patch_size)
-print("Finish loading {} patches from {} studies".format(train_X.shape[0], len(case_partition['train'])))
-valid_X, valid_y = load_patches(config['case_list_dir'],
-                                case_partition['validation'],
-                                patch_size=patch_size)
-print("Finish loading {} patches from {} studies".format(valid_X.shape[0], len(case_partition['validation'])))
-test_X, test_y = load_patches(config['case_list_dir'],
-                              case_partition['test'],
-                              patch_size=patch_size)
+patch_size = config['dataset']['input_dim'][0]
+train_X, train_y = load_patches(
+    config['dataset']['dir'], case_partition['train'], patch_size=patch_size)
+print("Finish loading {} patches from {} studies".format(
+    train_X.shape[0], len(case_partition['train'])))
+valid_X, valid_y = load_patches(
+    config['dataset']['dir'],
+    case_partition['validation'],
+    patch_size=patch_size,
+    train_mode=False)
+print("Finish loading {} patches from {} studies".format(
+    valid_X.shape[0], len(case_partition['validation'])))
+test_X, test_y = load_patches(
+    config['dataset']['dir'], case_partition['test'], patch_size=patch_size,
+    train_mode=False)
 
-# Shuffle data
-shuffle_indices = np.random.permutation(np.arange(len(train_y)))
-train_X = train_X[shuffle_indices]
-train_y = train_y[shuffle_indices]
-
-train_y = keras.utils.to_categorical(train_y, num_classes=2)
-valid_y = keras.utils.to_categorical(valid_y, num_classes=2)
-test_y = keras.utils.to_categorical(test_y, num_classes=2)
-
-
-# # Data Generators - Keras
-# training_generator = DataGenerator_keras(
-#     train_X, train_y,
-#     case_partition['train'], labels, patch_paths,
-#     config['batch_size'], config['input_dim'][:2], config['input_dim'][2], 2, True)
-# validation_generator = DataGenerator_keras(
-#     valid_X, valid_y,
-#     case_partition['validation'], labels, patch_paths,
-#     config['batch_size'], config['input_dim'][:2], config['input_dim'][2], 2, False)
+# Data Generators - Keras
+datagen = ImageDataGenerator(
+    rotation_range=45,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    horizontal_flip=True,
+    fill_mode='constant',
+    cval=0.0,
+    vertical_flip=True)
+datagen.fit(train_X)
 
 # Model Init
-model = simple_cnn_keras(config['input_dim'], num_classes=2)
-model.compile(loss=keras.losses.categorical_crossentropy,
-              optimizer=keras.optimizers.Adam(lr=config['lr'], amsgrad=True),
-              metrics=['accuracy'])
-cbs = [keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
-                                         patience=10, verbose=1),
-       keras.callbacks.EarlyStopping(monitor='val_loss', patience=20)]
+model = eval(config['model']['name'])(config['dataset']['input_dim'])
+model.compile(
+    loss=keras.losses.binary_crossentropy,
+    optimizer=keras.optimizers.Adam(lr=config['optimizer']['lr'],
+                                    amsgrad=True),
+    metrics=['accuracy'])
+cbs = [
+    keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss', factor=0.1, patience=10, verbose=1),
+    keras.callbacks.EarlyStopping(monitor='val_loss', patience=40)
+]
 
-# # Model fitting
-# model.fit_generator(generator=training_generator,
-#                     validation_data=validation_generator,
-#                     epochs=config['epochs'],
-#                     verbose=1,
-#                     callbacks=cbs,
-#                     use_multiprocessing=True,
-#                     workers=config['num_cpu'])
+# Train and evaluate
+history = model.fit_generator(
+    datagen.flow(train_X, train_y, batch_size=config['train']['batch_size']),
+    epochs=config['train']['epochs'],
+    callbacks=cbs,
+    steps_per_epoch=len(train_X)/config['train']['batch_size'],
+    class_weight='auto',
+    validation_data=(valid_X, valid_y))
 
-with experiment.train():
-    history = model.fit(train_X,
-                        train_y,
-                        epochs=config['epochs'],
-                        callbacks=cbs,
-                        batch_size=32,
-                        class_weight='auto',
-                        validation_data=(valid_X, valid_y))
+loss, accuracy = model.evaluate(test_X, test_y)
+print('loss = ', loss, 'accuracy = ', accuracy)
 
-with experiment.test():
-    loss, accuracy = model.evaluate(test_X, test_y)
-    experiment.log_metrics({'loss': loss,
-                            'accracy': accuracy})
+# Save the result
+fig_acc = show_train_history(history, 'acc', 'val_acc')
+plt.savefig(os.path.join(log_path, 'acc_plot.png'))
+
+fig_los = show_train_history(history, 'loss', 'val_loss')
+plt.savefig(os.path.join(log_path, 'loss_plot.png'))
+
+model.save_weights(os.path.join(model_path, 'weights.h5'))
