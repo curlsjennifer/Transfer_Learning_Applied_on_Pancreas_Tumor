@@ -382,7 +382,7 @@ def load_patches(data_path, case_list, patch_size=50, train_mode=True):
     y_total = []
     for ID in tqdm.tqdm(case_list):
         X_tmp, y_tmp = patch_generator(
-            data_path, ID, patch_size, train_mode=train_mode)
+            data_path, ID, patch_size, stride=5, threadshold=0.0004, max_amount=4000)
         X_total.extend(X_tmp)
         y_total.extend(y_tmp)
     X = np.array(X_total)
