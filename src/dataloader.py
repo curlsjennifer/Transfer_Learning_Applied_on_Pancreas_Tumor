@@ -22,6 +22,27 @@ class dataloder:
         self.target_size = target_size
         self.includebg = includebg
 
+    def verify_background(self, img_list):
+        assert len(img_list.shape) == 4
+        assert img_list.shape[1:] == self.patch_size
+        target_size = self.target_size
+        patch_size = self.patch_size
+        tx = (patch_size[0] - target_size[0]) // 2
+        ty = (patch_size[1] - target_size[1]) // 2
+        tz = (patch_size[2] - target_size[2]) // 2
+        return (
+            np.sum(
+                img_list[
+                    :,
+                    tx : tx + target_size[0],
+                    ty : ty + target_size[1],
+                    tz : tz + target_size[2],
+                ],
+                axis=(1, 2, 3),
+            )
+            == 0
+        )
+
     def _slides_to_patches(self, pancreas, lesion=None):
         assert lesion is None or pancreas.shape == lesion.shape
         pan = pancreas
@@ -64,7 +85,9 @@ class dataloder:
                 ty = (patch_size[1] - target_size[1]) // 2
                 tz = (patch_size[2] - target_size[2]) // 2
                 img_les = np.zeros(patch_size)
-                img_les[: ex - sx, : ey - sy, : ez - sz] = les[sx:ex, sy:ey, sz:ez]
+                img_les[: ex - sx, : ey - sy, : ez - sz] = les[
+                    sx:ex, sy:ey, sz:ez
+                ]
                 y[index] = (
                     np.sum(
                         img_les[
