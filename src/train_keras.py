@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 import argparse
-from time import gmtime, strftime
-from comet_ml import Experiment
+from time import localtime, strftime
+# from comet_ml import Experiment
 
 import tensorflow as tf
 import keras
 from keras.backend.tensorflow_backend import set_session
 from keras.preprocessing.image import ImageDataGenerator
-from sklearn.metrics import confusion_matrix, roc_curve
+
 
 from utils import load_config, flatten_config_for_logging
 from data_loader.data_loader import (convert_csv_to_dict,
@@ -34,7 +34,7 @@ args = parser.parse_args()
 # Load config
 config = load_config(args.config)
 if args.run_name is None:
-    config['run_name'] = strftime("%Y%m%d_%H%M%S", gmtime())
+    config['run_name'] = strftime("%Y%m%d_%H%M%S", localtime())
 else:
     config['run_name'] = args.run_name
 pprint(config)
@@ -44,7 +44,7 @@ if not os.path.isdir(log_path):
     os.mkdir(log_path)
 model_path = os.path.join(config['log']['model_dir'], config['run_name'])
 if not os.path.isdir(model_path):
-    os.mkdir(log_path)
+    os.mkdir(model_path)
 
 # Record experiment in Comet.ml
 if args.comet_implement:
@@ -68,20 +68,23 @@ case_partition = convert_csv_to_dict()
 
 # Get patches
 patch_size = config['dataset']['input_dim'][0]
+stride = config['dataset']['stride']
 train_X, train_y = load_patches(
-    config['dataset']['dir'], case_partition['train'], patch_size=patch_size)
+    config['dataset']['dir'], case_partition['train'], patch_size=patch_size, stride=stride)
 print("Finish loading {} patches from {} studies".format(
     train_X.shape[0], len(case_partition['train'])))
+print("With {} lesion patches and {} normal pancreas patches".format(
+    np.sum(train_y), train_X.shape[0]-np.sum(train_y)))
 valid_X, valid_y = load_patches(
     config['dataset']['dir'],
     case_partition['validation'],
-    patch_size=patch_size,
-    train_mode=False)
+    patch_size=patch_size)
 print("Finish loading {} patches from {} studies".format(
     valid_X.shape[0], len(case_partition['validation'])))
+print("With {} lesion patches and {} normal pancreas patches".format(
+    np.sum(valid_y), valid_X.shape[0]-np.sum(valid_y)))
 test_X, test_y = load_patches(
-    config['dataset']['dir'], case_partition['test'], patch_size=patch_size,
-    train_mode=False)
+    config['dataset']['dir'], case_partition['test'], patch_size=patch_size)
 
 # Data Generators - Keras
 datagen = ImageDataGenerator(
@@ -96,10 +99,14 @@ datagen.fit(train_X)
 
 # Model Init
 model = eval(config['model']['name'])(config['dataset']['input_dim'])
+# model.compile(
+#     loss=keras.losses.binary_crossentropy,
+#     optimizer=keras.optimizers.Adam(lr=config['optimizer']['lr'],
+#                                     amsgrad=True),
+#     metrics=['accuracy'])
 model.compile(
     loss=keras.losses.binary_crossentropy,
-    optimizer=keras.optimizers.Adam(lr=config['optimizer']['lr'],
-                                    amsgrad=True),
+    optimizer=keras.optimizers.Adam(amsgrad=True),
     metrics=['accuracy'])
 cbs = [
     keras.callbacks.ReduceLROnPlateau(
@@ -127,3 +134,4 @@ fig_los = show_train_history(history, 'loss', 'val_loss')
 plt.savefig(os.path.join(log_path, 'loss_plot.png'))
 
 model.save_weights(os.path.join(model_path, 'weights.h5'))
+model.save(os.path.join(model_path, 'model.h5'))

@@ -65,8 +65,7 @@ print("Finish loading model!")
 # Load test data and make prediction
 patch_size = config['dataset']['input_dim'][0]
 test_X, test_y = load_patches(
-    config['dataset']['dir'], case_partition['test'], patch_size=patch_size,
-    train_mode=False)
+    config['dataset']['dir'], case_partition['test'], patch_size=patch_size)
 
 loss, accuracy = model.evaluate(test_X, test_y)
 print('loss = ', loss, 'accuracy = ', accuracy)
@@ -89,51 +88,55 @@ print(patch_tpr[index_start])
 threshold = patch_thresholds[index_start]
 
 tpr_val = np.ceil(patch_tpr[index_start]*10)/10
-while tpr_val <= 1:
-    index_roc = (np.abs(patch_tpr - tpr_val)).argmin()
-    threshold = patch_thresholds[index_roc]
-    print('TP:', tpr_val, 'threshold:', threshold)
+# while tpr_val <= 1:
 
-    tpr_val = tpr_val + 0.05
+# Patient-based
+patient_prediction = pd.DataFrame(
+    columns=['case_id', 'detected_patches', 'total_patches', 'prediction'])
+patient_y = []
+for index, case_id in enumerate(case_partition['test']):
+    if case_id[:2] == 'AD' or case_id[:2] == 'NP':
+        patient_y.append(0)
+        X, y = patch_generator(
+            config['dataset']['dir'], case_id, patch_size,
+            stride=5, threadshold=0.0004)
+        test_X = np.array(X)
+        test_X = test_X.reshape(
+            (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
+        y_predict = model.predict_proba(test_X)
+        y_predict[y_predict < threshold] = 0
+        y_predict[y_predict > threshold] = 1
+        patient_prediction.loc[index] = [case_id, np.sum(
+            y_predict), len(y_predict), np.mean(y_predict)]
+    else:
+        patient_y.append(1)
+        X, y = patch_generator(
+            config['dataset']['dir'], case_id, patch_size,
+            stride=5, threadshold=0.0004)
+        test_X = np.array(X)
+        test_X = test_X.reshape(
+            (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
+        y_predict = model.predict_proba(test_X)
+        y_predict[y_predict < threshold] = 0
+        y_predict[y_predict >= threshold] = 1
+        patient_prediction.loc[index] = [case_id, np.sum(
+            y_predict), len(y_predict), np.mean(y_predict)]
+# tpr_name = str(np.floor((tpr_val-0.05)*100)/100)
+tpr_name = str(np.floor(tpr_val*100)/100)
 
-    # Patient-based
-    patient_prediction = pd.DataFrame(
-        columns=['case_id', 'detected_patches', 'total_patches', 'prediction'])
-    patient_y = []
-    for index, case_id in enumerate(case_partition['test']):
-        if case_id[:2] == 'AD' or case_id[:2] == 'NP':
-            patient_y.append(0)
-            X, y = patch_generator(
-                config['dataset']['dir'], case_id, patch_size,
-                max_amount=100, train_mode=False)
-            test_X = np.array(X)
-            test_X = test_X.reshape(
-                (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
-            y_predict = model.predict_proba(test_X)
-            y_predict[y_predict < threshold] = 0
-            y_predict[y_predict > threshold] = 1
-            patient_prediction.loc[index] = [case_id, np.sum(
-                y_predict), len(y_predict), np.mean(y_predict)]
-        else:
-            patient_y.append(1)
-            X, y = patch_generator(
-                config['dataset']['dir'], case_id, patch_size,
-                max_amount=50, train_mode=False)
-            test_X = np.array(X)
-            test_X = test_X.reshape(
-                (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
-            y_predict = model.predict_proba(test_X)
-            y_predict[y_predict < threshold] = 0
-            y_predict[y_predict >= threshold] = 1
-            patient_prediction.loc[index] = [case_id, np.sum(
-                y_predict), len(y_predict), np.mean(y_predict)]
-    tpr_name = str(np.floor((tpr_val-0.05)*100)/100)
-    patient_prediction.to_csv(
-        os.path.join(result_path, ('patient_prediction_' + tpr_name + '.csv')))
-    fpr, tpr, thresholds = roc_curve(
-        patient_y, list(patient_prediction['prediction']))
+patient_prediction.to_csv(
+    os.path.join(result_path, ('patient_prediction_' + tpr_name + '.csv')))
+fpr, tpr, thresholds = roc_curve(
+    patient_y, list(patient_prediction['prediction']))
 
-    patient_fig = plot_roc(list(patient_prediction['prediction']), patient_y)
-    plt.savefig(os.path.join(result_path, ('patient_roc' + tpr_name + '.png')))
+patient_fig = plot_roc(list(patient_prediction['prediction']), patient_y)
+plt.savefig(os.path.join(result_path, ('patient_roc' + tpr_name + '.png')))
+
+# index_roc = (np.abs(patch_tpr - tpr_val)).argmin()
+# threshold = patch_thresholds[index_roc]
+# print('TP:', tpr_val, 'threshold:', threshold)
+
+# tpr_val = tpr_val + 0.05
+
 
 print('ALL DONE!')

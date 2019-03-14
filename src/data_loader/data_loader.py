@@ -123,7 +123,8 @@ class DataGenerator_keras(keras.utils.Sequence):
 
     """
 
-    def __init__(self, X_total, y_total, list_IDs, labels, patch_paths, batch_size=32, dim=(32, 32), n_channels=1,
+    def __init__(self, X_total, y_total, list_IDs, labels, patch_paths,
+                 batch_size=32, dim=(32, 32), n_channels=1,
                  n_classes=2, shuffle=False, load_fn=np.load):
         'Initialization'
         self.X_total = X_total
@@ -377,12 +378,12 @@ def get_patch_partition_labels(case_partition, pancreas_dir, lesion_dir):
     return patch_partition, patch_paths, labels
 
 
-def load_patches(data_path, case_list, patch_size=50, train_mode=True):
+def load_patches(data_path, case_list, patch_size=50, stride=5):
     X_total = []
     y_total = []
     for ID in tqdm.tqdm(case_list):
         X_tmp, y_tmp = patch_generator(
-            data_path, ID, patch_size, stride=5, threadshold=0.0004, max_amount=4000)
+            data_path, ID, patch_size, stride=stride, threadshold=0.0004, max_amount=1000)
         X_total.extend(X_tmp)
         y_total.extend(y_tmp)
     X = np.array(X_total)

@@ -1,5 +1,5 @@
 system:
-    CUDA_VISIBLE_DEVICES: '0'
+    CUDA_VISIBLE_DEVICES: '7'
     GPU_memory_fraction: 0.5
     num_cpu: 10
     random_seed: 13
@@ -18,7 +18,7 @@ optimizer:
 
 train:
     epochs: 200
-    batch_size: 128
+    batch_size: 512
 
 validation:
     batch_size: 512
@@ -27,6 +27,7 @@ dataset:
     dir: '/home/d/pancreas/box_data'
     csv: '/home/d/pancreas/raw_data/data_list.csv'
     input_dim: [50, 50, 1]  # HWC
+    stride: 10
 
 comet:
     api_key: 'vxjwm9gKFuiJaYpfHDBto3EgN'
