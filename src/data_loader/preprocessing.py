@@ -84,5 +84,5 @@ def find_largest(label):
     lbl_map = measure.label(label.astype(int))
     volumn_count = np.delete(np.bincount(lbl_map.flat), 0)
     new_label = np.zeros(label.shape)
-    new_label[np.where(lbl_map == np.argmax(volumn_count)+1)] = 1
+    new_label[np.where(lbl_map == np.argmax(volumn_count) + 1)] = 1
     return new_label

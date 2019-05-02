@@ -29,7 +29,7 @@ from data_loader.preprocessing import (minmax_normalization, windowing,
 
 def patch_generator(data_path, tumor_id, patch_size=50,
                     dilation=[5, 5, 5], add_mask=True,
-                    stride=30, threadshold=0.5,
+                    stride=30, threshold=0.5,
                     max_amount=1000):
     """
     Usage: Complete process of patch generating
@@ -69,7 +69,7 @@ def patch_generator(data_path, tumor_id, patch_size=50,
     lesion = morphology.dilation(lesion, np.ones([3, 3, 1]))
 
     coords = masked_2D_sampler(
-        lesion, pancreas, patch_size, stride, threadshold,
+        lesion, pancreas, patch_size, stride, threshold,
         max_amount=max_amount)
 
     img = np.load(img_path)
@@ -89,7 +89,8 @@ def patch_generator(data_path, tumor_id, patch_size=50,
     return X, Y
 
 
-def masked_2D_sampler(lesion, pancreas, patch_size, stride, threadshold, max_amount=4000):
+def masked_2D_sampler(lesion, pancreas, patch_size, stride,
+                      threshold, max_amount=4000):
     """
     Usage: generate 2D patches from mask
 
@@ -98,7 +99,7 @@ def masked_2D_sampler(lesion, pancreas, patch_size, stride, threadshold, max_amo
     mask (numpy array): Mask for patch segmentation
     patch_size (int): Patch size
     stride (int): Distance of the moving window
-    threadshold (float): 0 < threadshold < 1
+    threshold (float): 0 < threshold < 1
 
     Returns
     -------
@@ -109,28 +110,28 @@ def masked_2D_sampler(lesion, pancreas, patch_size, stride, threadshold, max_amo
 
     coords = []
     for z in range(lesion.shape[2]):
-        for row in range((lesion.shape[0]-patch_size) // stride + 1):
-            for col in range((lesion.shape[1]-patch_size) // stride + 1):
-                x_min = row*stride
-                y_min = col*stride
+        for row in range((lesion.shape[0] - patch_size) // stride + 1):
+            for col in range((lesion.shape[1] - patch_size) // stride + 1):
+                x_min = row * stride
+                y_min = col * stride
 
-                x_max = x_min+patch_size
+                x_max = x_min + patch_size
                 if x_max > lesion.shape[0]:
                     x_max = lesion.shape[0]
                     x_min = x_max - patch_size
-                y_max = y_min+patch_size
+                y_max = y_min + patch_size
                 if y_max > lesion.shape[1]:
                     y_max = lesion.shape[1]
                     y_min = y_max - patch_size23
                 z_min = z
-                z_max = z+1
+                z_max = z + 1
                 patch_lesion = lesion[x_min:x_max, y_min:y_max, z_min:z_max]
                 patch_pancreas = pancreas[x_min:x_max, y_min:y_max, z_min:z_max]
-                if np.sum(patch_lesion)/(patch_size**2) > threadshold:
+                if np.sum(patch_lesion) / (patch_size**2) > threshold:
                     value = 1
                     coords.append([value, x_min, y_min, z_min,
                                    x_max, y_max, z_max])
-                elif np.sum(patch_pancreas)/(patch_size**2) > threadshold:
+                elif np.sum(patch_pancreas) / (patch_size**2) > threshold:
                     value = 0
                     coords.append([value, x_min, y_min, z_min,
                                    x_max, y_max, z_max])
@@ -144,7 +145,7 @@ def masked_2D_sampler(lesion, pancreas, patch_size, stride, threadshold, max_amo
     return coords
 
 
-def masked_3D_sampler(mask, patch_size, stride, threadshold, value=0):
+def masked_3D_sampler(mask, patch_size, stride, threshold, value=0):
     """
     Usage: generate 3D patches from mask
 
@@ -153,7 +154,7 @@ def masked_3D_sampler(mask, patch_size, stride, threadshold, value=0):
     mask (numpy array): Mask for patch segmentation
     patch_size (int): Patch size
     stride (int): Distance of the moving window
-    threadshold (float): 0 < threadshold < 1
+    threshold (float): 0 < threshold < 1
 
     Returns
     -------
@@ -191,14 +192,14 @@ def masked_3D_sampler(mask, patch_size, stride, threadshold, value=0):
                         z_min = z_max - patch_size
 
                     patch = mask[x_min:x_max, y_min:y_max, z_min:z_max]
-                    if np.sum(patch)/patch_size**3 > threadshold:
+                    if np.sum(patch) / patch_size**3 > threshold:
                         coords.append([value, x_min, y_min, z_min,
                                        x_max, y_max, z_max])
     return coords
 
 
-def adjust_patch_num(mask, patch_size, stride, threadshold, stride_decay=0.5,
-                     threadshold_decay=0.5, min_amount=10,
+def adjust_patch_num(mask, patch_size, stride, threshold, stride_decay=0.5,
+                     threshold_decay=0.5, min_amount=10,
                      max_amount=200, train_mode=True, force=False):
     """
     Usage: adjust the number of patches in each case
@@ -208,9 +209,9 @@ def adjust_patch_num(mask, patch_size, stride, threadshold, stride_decay=0.5,
     mask (numpy array): Mask for patch segmentation
     patch_size (int): Original patch size
     stride (int): Original distance of the moving window
-    threadshold (float): 0 < threadshold < 1, original threadshold
+    threshold (float): 0 < threshold < 1, original threshold
     stride_decay (float): 0 < stride_decay < 1, decay amount of stride
-    threadshold_decay (float): 0 < threadshold_decay < 1,
+    threshold_decay (float): 0 < threshold_decay < 1,
                                decay amount of stride
     min_amount (int): Minimal amount of patches in each case
                       Please notice that this only monitor the decay part,
@@ -231,10 +232,10 @@ def adjust_patch_num(mask, patch_size, stride, threadshold, stride_decay=0.5,
     coords = []
 
     # loose standard if not enough patches
-    while len(coords) < min_amount and stride > 0 and threadshold > 0:
-        coords = masked_2D_sampler(mask, patch_size, stride, threadshold)
+    while len(coords) < min_amount and stride > 0 and threshold > 0:
+        coords = masked_2D_sampler(mask, patch_size, stride, threshold)
         stride = int(stride * stride_decay)
-        # threadshold = threadshold * threadshold_decay
+        # threshold = threshold * threshold_decay
 
     # # force to generate mask if the mask is "lesion"
     # if len(coords) == 0 and force:

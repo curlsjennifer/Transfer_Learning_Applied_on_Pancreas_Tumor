@@ -25,8 +25,8 @@ from skimage import morphology, measure
 import nibabel as nib
 import scipy
 
-from checking import refine_dcm
-from preprocessing import get_pixels_hu, resample, find_largest
+from data_loader.checking import refine_dcm
+from data_loader.preprocessing import get_pixels_hu, resample, find_largest
 
 
 def get_imageposition(dcmfile):
@@ -41,7 +41,7 @@ def get_pixelspacing(dcmfile):
 
 def get_dicominfo(tumorpath, sortkey):
     # Get ordered path and find path order
-    dcmpathes = sorted(glob.glob(tumorpath+'scans/*.dcm'), key=sortkey)
+    dcmpathes = sorted(glob.glob(tumorpath + 'scans/*.dcm'), key=sortkey)
     dcmfile_0 = refine_dcm(dcmpathes[0])
     dcmfile_1 = refine_dcm(dcmpathes[1])
 
@@ -56,8 +56,8 @@ def get_dicominfo(tumorpath, sortkey):
 
     # Find each space relative origin and spacing
     img_origin = get_imageposition(dcmfile_0)
-    thickness = abs(get_imageposition(dcmfile_0)[2] -
-                    get_imageposition(dcmfile_1)[2])
+    thickness = abs(get_imageposition(dcmfile_0)[2]
+                    - get_imageposition(dcmfile_1)[2])
     img_spacing = np.array(get_pixelspacing(dcmfile_0) + [float(thickness)])
 
     return dcmpathes, img_origin, thickness, img_spacing
@@ -97,7 +97,7 @@ def create_boxdata(tumorpath, sortkey,
         tumorpath, sortkey)
 
     # Read label nrrd
-    tumor_label, tumor_options = nrrd.read(tumorpath+'label.nrrd')
+    tumor_label, tumor_options = nrrd.read(tumorpath + 'label.nrrd')
     label_shape = np.array(tumor_label.shape[1:]) \
         if len(tumor_label.shape) == 4 else np.array(tumor_label.shape)
 
@@ -110,8 +110,8 @@ def create_boxdata(tumorpath, sortkey,
                               .astype(float))
 
     # Calculate segmetation origin index in image voxel coordinate
-    seg_origin_idx = np.round((seg_origin / seg_spacing -
-                               img_origin / img_spacing)).astype(int)
+    seg_origin_idx = np.round((seg_origin / seg_spacing
+                               - img_origin / img_spacing)).astype(int)
 
     # Get box origin and length
     box_origin_idx = seg_origin_idx - border
@@ -123,10 +123,10 @@ def create_boxdata(tumorpath, sortkey,
 
     # Get DICOM scans and transfer to HU
     patient_scan = [refine_dcm(dcmpath)
-                    for dcmpath in dcmpathes[z_orgidx: z_orgidx+z_len]]
+                    for dcmpath in dcmpathes[z_orgidx: z_orgidx + z_len]]
 
-    patient_hu = get_pixels_hu(patient_scan)[:, y_orgidx: y_orgidx+y_len,
-                                             x_orgidx: x_orgidx+x_len]
+    patient_hu = get_pixels_hu(patient_scan)[:, y_orgidx: y_orgidx + y_len,
+                                             x_orgidx: x_orgidx + x_len]
     patient_hu = patient_hu.transpose(2, 1, 0)
 
     if fine_to_thick:
@@ -148,13 +148,13 @@ def create_boxdata(tumorpath, sortkey,
     for i, category_name in enumerate(category_names):
         category_label = np.zeros(box_length)
         if len(tumor_label.shape) == 4:
-            category_label[x_border: x_len-x_border,
-                           y_border: y_len-y_border,
-                           z_border: z_len-z_border] = tumor_label[i]
+            category_label[x_border: x_len - x_border,
+                           y_border: y_len - y_border,
+                           z_border: z_len - z_border] = tumor_label[i]
         else:
-            category_label[x_border: x_len-x_border,
-                           y_border: y_len-y_border,
-                           z_border: z_len-z_border] = tumor_label
+            category_label[x_border: x_len - x_border,
+                           y_border: y_len - y_border,
+                           z_border: z_len - z_border] = tumor_label
 
         if fine_to_thick:
             category_label = finecut_to_thickcut(
@@ -341,11 +341,11 @@ def finecut_to_thickcut(image, thickness, label_mode=False):
     if not remove_num == 0:
         image = image[:, :, :-int(remove_num)]
 
-    zip_shape = (image.shape[0], image.shape[1], int(image.shape[2]/zip_num))
+    zip_shape = (image.shape[0], image.shape[1], int(image.shape[2] / zip_num))
     zip_img = np.zeros(zip_shape)
     for i in range(zip_shape[2]):
         zip_img[:, :, i] = np.mean(
-            image[:, :, i*zip_num: (i+1)*zip_num], axis=2)
+            image[:, :, i * zip_num: (i + 1) * zip_num], axis=2)
         if label_mode:
             zip_img[zip_img < 0.3] = 0
             zip_img[zip_img >= 0.3] = 1

@@ -1,4 +1,5 @@
 import glob
+import os
 
 import pickle
 import numpy as np
@@ -9,8 +10,14 @@ from torch.utils import data
 import keras
 from skimage import morphology, measure
 import tqdm
+import SimpleITK as sitk
+import nibabel as nib
 
 from data_loader.patch_sampler import patch_generator
+from data_loader.patch_sampler import masked_2D_sampler
+from data_loader.preprocessing import (
+    minmax_normalization, windowing, smoothing)
+from data_loader.create_boxdata import finecut_to_thickcut
 
 
 def getDataloader(config):
@@ -151,8 +158,8 @@ class DataGenerator_keras(keras.utils.Sequence):
     def __getitem__(self, index):
         'Generate one batch of data'
         # Generate indexes of the batch
-        indexes = self.indexes[index *
-                               self.batch_size:(index + 1) * self.batch_size]
+        indexes = self.indexes[index
+                               * self.batch_size:(index + 1) * self.batch_size]
 
         # Find list of IDs
         list_IDs_temp = [self.list_IDs[k] for k in indexes]
@@ -203,6 +210,163 @@ class DataGenerator_keras(keras.utils.Sequence):
     #         y[i] = self.labels[ID]
 
     #     return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
+
+
+class DataGenerator_other():
+    def __init__(self, data_path, patch_size, stride=5, data_type='MSD'):
+        self.data_path = data_path
+        self.patch_size = patch_size
+        self.stride = stride
+        self.data_type = data_type
+
+    def load_image(self, filename):
+        if self.data_type == 'Pancreas-CT':
+            file_location = glob.glob(os.path.join(
+                self.data_path, filename) + '/*/*/000001.dcm')
+            imagedir = os.path.dirname(file_location[0])
+            labelname = 'label' + filename[-4:] + '.nii.gz'
+            labelpath = os.path.join(self.data_path, 'annotations', labelname)
+
+            reader = sitk.ImageSeriesReader()
+            dicom_names = reader.GetGDCMSeriesFileNames(imagedir)
+            reader.SetFileNames(dicom_names)
+            image = reader.Execute()
+            image_array = sitk.GetArrayFromImage(image).transpose((2, 1, 0))
+            self.thickness = image.GetSpacing()[2]
+            label = nib.load(labelpath).get_data()
+        elif self.data_type == 'MSD':
+            imagepath = os.path.join(self.data_path, 'imagesTr', filename)
+            labelpath = os.path.join(self.data_path, 'labelsTr', filename)
+
+            image_array = nib.load(imagepath).get_data()
+            label = nib.load(labelpath).get_data()
+            self.affine = nib.load(imagepath).affine
+            self.thickness = self.affine[2, 2]
+
+        return image_array, label
+
+    def get_boxdata(self, filename, border=(10, 10, 3)):
+
+        image, label = self.load_image(filename)
+
+        pancreas = np.zeros(label.shape)
+        pancreas[np.where(label != 0)] = 1
+        lesion = np.zeros(label.shape)
+        if self.data_type == 'MSD':
+            lesion[np.where(label == 2)] = 1
+
+        if self.thickness < 5:
+            image = finecut_to_thickcut(image, self.thickness)
+            pancreas = finecut_to_thickcut(
+                pancreas, self.thickness, label_mode=True)
+            lesion = finecut_to_thickcut(
+                lesion, self.thickness, label_mode=True)
+
+        xmin, ymin, zmin = np.max(
+            [np.min(np.where(pancreas != 0), 1) - border, (0, 0, 0)], 0)
+        xmax, ymax, zmax = np.min(
+            [np.max(np.where(pancreas != 0), 1) + border, label.shape], 0)
+
+        box_image = image[xmin:xmax, ymin:ymax, zmin:zmax]
+        box_pancreas = pancreas[xmin:xmax, ymin:ymax, zmin:zmax]
+        box_lesion = lesion[xmin:xmax, ymin:ymax, zmin:zmax]
+
+        return box_image, box_pancreas, box_lesion
+
+    def preprocessing(self, filename):
+        from skimage import morphology
+        image, pancreas, lesion = self.get_boxdata(filename)
+
+        if self.data_type == 'Pancreas-CT':
+            image = image[:, ::-1, :]
+            pancreas = pancreas[:, ::-1, :]
+            lesion = lesion[:, ::-1, :]
+            pancreas = smoothing(pancreas)
+            lesion = smoothing(lesion)
+        elif self.data_type == 'MSD':
+            image = image[::-1, ::-1, :]
+            pancreas = pancreas[::-1, ::-1, :]
+            lesion = lesion[::-1, ::-1, :]
+
+        pancreas = morphology.dilation(pancreas, np.ones([3, 3, 1]))
+        lesion = morphology.dilation(lesion, np.ones([3, 3, 1]))
+
+        image = windowing(image)
+        image = minmax_normalization(image)
+
+        return image, pancreas, lesion
+
+    def generate_patch(self, filename):
+        X = []
+        Y = []
+
+        self.box_image, self.box_pancreas, self.box_lesion = self.preprocessing(
+            filename)
+
+        self.coords = masked_2D_sampler(self.box_lesion, self.box_pancreas,
+                                        self.patch_size, self.stride, threshold=1 / (self.patch_size ** 2))
+
+        self.box_image[np.where(self.box_pancreas == 0)] = 0
+
+        for coord in self.coords:
+            mask_pancreas = self.box_image[coord[1]
+                                           :coord[4], coord[2]:coord[5], coord[3]]
+            X.append(mask_pancreas)
+            Y.append(coord[0])
+
+        self.X = X
+        self.Y = Y
+
+        return X, Y
+
+    def patch_len(self):
+        return len(self.X)
+
+    def gt_pancreas_num(self):
+        return len(self.Y) - np.sum(self.Y)
+
+    def gt_lesion_num(self):
+        return np.sum(self.Y)
+
+    def get_prediction(self, filename, model, patch_threshold=0.5):
+        from sklearn.metrics import confusion_matrix
+        X, Y = self.generate_patch(filename)
+        if len(self.X) > 0:
+            test_X = np.array(self.X)
+            test_X = test_X.reshape(
+                (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
+            test_Y = np.array(self.Y)
+        else:
+            return filename
+
+        self.probs = model.predict_proba(test_X)
+        predict_y = predict_binary(self.probs, patch_threshold)
+        self.patch_matrix = confusion_matrix(test_Y, predict_y, labels=[1, 0])
+
+        return self.patch_matrix
+
+    def get_auc(self):
+        from sklearn.metrics import roc_curve, auc
+        fpr, tpr, thresholds = roc_curve(self.Y, self.probs)
+        return auc(fpr, tpr)
+
+    def get_roc_curve(self):
+        from data_description.visualization import plot_roc
+        plot_roc(self.probs, self.Y)
+
+    def get_all_value(self):
+        tp = self.patch_matrix[0][0]
+        fn = self.patch_matrix[0][1]
+        fp = self.patch_matrix[1][0]
+        tn = self.patch_matrix[1][1]
+        return tp, fn, fp, tn
+
+
+def predict_binary(prob, threshold):
+    binary = np.zeros(prob.shape)
+    binary[prob < threshold] = 0
+    binary[prob >= threshold] = 1
+    return binary
 
 
 def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path=None, test_cases=None, random_seed=None):
@@ -383,7 +547,7 @@ def load_patches(data_path, case_list, patch_size=50, stride=5):
     y_total = []
     for ID in tqdm.tqdm(case_list):
         X_tmp, y_tmp = patch_generator(
-            data_path, ID, patch_size, stride=stride, threadshold=0.0004, max_amount=1000)
+            data_path, ID, patch_size, stride=stride, threshold=0.0004, max_amount=1000)
         X_total.extend(X_tmp)
         y_total.extend(y_tmp)
     X = np.array(X_total)

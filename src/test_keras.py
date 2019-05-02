@@ -1,4 +1,5 @@
 import os
+import sys
 from pprint import pprint
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +11,7 @@ import pandas as pd
 import tensorflow as tf
 import keras
 from keras.backend.tensorflow_backend import set_session
-from sklearn.metrics import confusion_matrix, roc_curve
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 from utils import load_config, flatten_config_for_logging
 from data_loader.data_loader import (convert_csv_to_dict,
@@ -20,6 +21,19 @@ from data_description.visualization import plot_roc
 from data_loader.patch_sampler import patch_generator
 
 plt.switch_backend('agg')
+
+
+def predict_binary(prob, threshold):
+    binary = np.zeros(prob.shape)
+    binary[prob < threshold] = 0
+    binary[prob >= threshold] = 1
+    return binary
+
+
+def find_threshold(predict_probs, groundtrue):
+    fpr, tpr, thresholds = roc_curve(groundtrue, predict_probs)
+    return thresholds[np.argmax(1 - fpr + tpr)]
+
 
 # Parse Args
 parser = argparse.ArgumentParser()
@@ -62,32 +76,73 @@ model.compile(
     metrics=['accuracy'])
 print("Finish loading model!")
 
-# Load test data and make prediction
+# Load validation and test data
 patch_size = config['dataset']['input_dim'][0]
+valid_X, valid_y = load_patches(
+    config['dataset']['dir'], case_partition['validation'],
+    patch_size=patch_size)
 test_X, test_y = load_patches(
     config['dataset']['dir'], case_partition['test'], patch_size=patch_size)
 
-loss, accuracy = model.evaluate(test_X, test_y)
-print('loss = ', loss, 'accuracy = ', accuracy)
+# Find patch-based threshold from validation data
+valid_probs = model.predict_proba(valid_X)
+patch_threshold = find_threshold(valid_probs, valid_y)
 
-y_predict = model.predict_classes(test_X)
-print('Ground true tumor:', np.sum(test_y),
-      'Ground true pancreas:', test_y.shape[0]-np.sum(test_y))
-print('Predicted tumor:', np.sum(y_predict),
-      'Predicted pancreas:', y_predict.shape[0]-np.sum(y_predict))
-print(confusion_matrix(test_y, y_predict, labels=[1, 0]))
+# Find patient-based threshold from validation data
+patient_y = []
+patient_predict = []
+for index, case_id in enumerate(case_partition['validation'] + case_partition['train']):
+    if case_id[:2] == 'AD' or case_id[:2] == 'NP':
+        patient_y.append(0)
+        X, y = patch_generator(
+            config['dataset']['dir'], case_id, patch_size,
+            stride=5, threshold=0.0004)
+        valid_X = np.array(X)
+        valid_X = valid_X.reshape(
+            (valid_X.shape[0], valid_X.shape[1], valid_X.shape[2], 1))
+        y_predict = model.predict_proba(valid_X)
+        y_predict = predict_binary(y_predict, patch_threshold)
+        patient_predict.append(np.mean(y_predict))
+    else:
+        patient_y.append(1)
+        X, y = patch_generator(
+            config['dataset']['dir'], case_id, patch_size,
+            stride=5, threshold=0.0004)
+        valid_X = np.array(X)
+        valid_X = valid_X.reshape(
+            (valid_X.shape[0], valid_X.shape[1], valid_X.shape[2], 1))
+        y_predict = model.predict_proba(valid_X)
+        y_predict = predict_binary(y_predict, patch_threshold)
+        patient_predict.append(np.mean(y_predict))
+patient_threshold = find_threshold(patient_predict, patient_y)
+# print('patient_based threshold:', patient_threshold)
 
+# Test data
 probs = model.predict_proba(test_X)
 patch_fig = plot_roc(probs, test_y)
 plt.savefig(os.path.join(result_path, 'patch_roc.png'))
 
 patch_fpr, patch_tpr, patch_thresholds = roc_curve(test_y, probs)
+roc_auc = auc(patch_fpr, patch_tpr)
+print('Patch-based AUC:', roc_auc)
 
-index_start = np.argmax(1-patch_fpr + patch_tpr)
-print(patch_tpr[index_start])
-threshold = patch_thresholds[index_start]
+loss, accuracy = model.evaluate(test_X, test_y)
+print('For patch_based threshold = 0.5:')
+print('loss = ', loss, 'accuracy = ', accuracy)
 
-tpr_val = np.ceil(patch_tpr[index_start]*10)/10
+y_predict = model.predict_classes(test_X)
+print(confusion_matrix(test_y, y_predict, labels=[1, 0]))
+
+print('patch_based threshold:', patch_threshold)
+probs = predict_binary(probs, patch_threshold)
+patch_matrix = confusion_matrix(test_y, probs, labels=[1, 0])
+print(patch_matrix)
+print('accuracy:', (patch_matrix[0][0] + patch_matrix[1][1]) / len(test_y))
+print('sensitivity:', patch_matrix[0][0] / np.sum(test_y))
+print('specificity:', patch_matrix[1][1] / (test_y.shape[0] - np.sum(test_y)))
+
+
+# tpr_val = np.ceil(patch_tpr[index_start]*100)/100
 # while tpr_val <= 1:
 
 # Patient-based
@@ -99,44 +154,44 @@ for index, case_id in enumerate(case_partition['test']):
         patient_y.append(0)
         X, y = patch_generator(
             config['dataset']['dir'], case_id, patch_size,
-            stride=5, threadshold=0.0004)
+            stride=5, threshold=0.0004)
         test_X = np.array(X)
         test_X = test_X.reshape(
             (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
         y_predict = model.predict_proba(test_X)
-        y_predict[y_predict < threshold] = 0
-        y_predict[y_predict > threshold] = 1
+        y_predict = predict_binary(y_predict, patch_threshold)
         patient_prediction.loc[index] = [case_id, np.sum(
             y_predict), len(y_predict), np.mean(y_predict)]
     else:
         patient_y.append(1)
         X, y = patch_generator(
             config['dataset']['dir'], case_id, patch_size,
-            stride=5, threadshold=0.0004)
+            stride=5, threshold=0.0004)
         test_X = np.array(X)
         test_X = test_X.reshape(
             (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
         y_predict = model.predict_proba(test_X)
-        y_predict[y_predict < threshold] = 0
-        y_predict[y_predict >= threshold] = 1
+        y_predict = predict_binary(y_predict, patch_threshold)
         patient_prediction.loc[index] = [case_id, np.sum(
             y_predict), len(y_predict), np.mean(y_predict)]
-# tpr_name = str(np.floor((tpr_val-0.05)*100)/100)
-tpr_name = str(np.floor(tpr_val*100)/100)
 
 patient_prediction.to_csv(
-    os.path.join(result_path, ('patient_prediction_' + tpr_name + '.csv')))
+    os.path.join(result_path, ('patient_prediction.csv')))
+
 fpr, tpr, thresholds = roc_curve(
     patient_y, list(patient_prediction['prediction']))
+patient_auc = auc(fpr, tpr)
+print('Patient-based AUC:', patient_auc)
 
 patient_fig = plot_roc(list(patient_prediction['prediction']), patient_y)
-plt.savefig(os.path.join(result_path, ('patient_roc' + tpr_name + '.png')))
+plt.savefig(os.path.join(result_path, ('patient_roc.png')))
 
-# index_roc = (np.abs(patch_tpr - tpr_val)).argmin()
-# threshold = patch_thresholds[index_roc]
-# print('TP:', tpr_val, 'threshold:', threshold)
+patient_probs = np.array(list(patient_prediction['prediction']))
+print('patient_based threshold', patient_threshold)
+patient_bin = predict_binary(patient_probs, patient_threshold)
+print(confusion_matrix(patient_y, patient_bin, labels=[1, 0]))
 
-# tpr_val = tpr_val + 0.05
-
+patient_new = predict_binary(patient_probs, patient_threshold - 0.05)
+print(confusion_matrix(patient_y, patient_new, labels=[1, 0]))
 
 print('ALL DONE!')

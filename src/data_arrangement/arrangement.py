@@ -82,7 +82,7 @@ def move_labeldata_finecut(label, brief_df, detail_df, source_scan_path,
         os.makedirs(target_tumor_parent_path)
 
     check_copy = False
-    for dcmpath in glob.glob(tumor_parent_path+'*/*0001.dcm'):
+    for dcmpath in glob.glob(tumor_parent_path + '*/*0001.dcm'):
         # Get DICOM series number and avoid dose description
         try:
             dcm_series_no = str(dicom.read_file(dcmpath)[0x0020, 0x0011].value)
@@ -156,7 +156,7 @@ def move_labeldata_55cut(label, detail_df, source_scan_path,
         os.makedirs(target_tumor_parent_path)
 
     check_copy = False
-    for dcmpath in glob.glob(tumor_parent_path+'*/*I1.dcm'):
+    for dcmpath in glob.glob(tumor_parent_path + '*/*I1.dcm'):
         # Get DICOM series number and avoid dose description
         try:
             dcmfile = refine_dcm(dcmpath)
@@ -215,7 +215,7 @@ def move_nolabeldata(patient_id, detail_df, source_scan_path,
 
     # Basic Info
     chartnumber = str(int(dtumor_df['chartnumber'][0]))
-    patient_id = '0'*(6-len(chartnumber)) + chartnumber
+    patient_id = '0' * (6 - len(chartnumber)) + chartnumber
 
     exam_date = int(dtumor_df['CT Date'][0])
     series_no = str(int(dtumor_df['Unnamed: 9'][0]))
@@ -229,7 +229,7 @@ def move_nolabeldata(patient_id, detail_df, source_scan_path,
         os.makedirs(target_tumor_parent_path)
 
     check_copy = False
-    for dcmpath in glob.glob(tumor_parent_path+'*/*0001.dcm'):
+    for dcmpath in glob.glob(tumor_parent_path + '*/*0001.dcm'):
         # Get DICOM series number and avoid dose description
         try:
             dcmfile = refine_dcm(dcmpath)
@@ -263,7 +263,7 @@ def sort_date(source_path):
 
     st_tol = time.time()
     cnt = 0
-    for dcmpath in tqdm(glob.glob(source_path+'/*/*.dcm')):
+    for dcmpath in tqdm(glob.glob(source_path + '/*/*.dcm')):
         try:
             dcmfile = refine_dcm(dcmpath)
             date = str(dcmfile[0x0008, 0x0020].value)
@@ -274,7 +274,7 @@ def sort_date(source_path):
             cnt += 1
         except:
             continue
-    print('Done moving {} data in {} seconds'.format(cnt, time.time()-st_tol))
+    print('Done moving {} data in {} seconds'.format(cnt, time.time() - st_tol))
 
 
 def sort_series(source_path):
@@ -294,7 +294,7 @@ def sort_series(source_path):
     cnt = 0
     error_file = []
     for case_path in tqdm(glob.glob(source_path + '/00*/*')):
-        for dcmpath in glob.glob(case_path+'/*.dcm'):
+        for dcmpath in glob.glob(case_path + '/*.dcm'):
             try:
                 dcmfile = refine_dcm(dcmpath)
                 series_number = str(dcmfile[0x0020, 0x0011].value)
@@ -306,4 +306,4 @@ def sort_series(source_path):
             except:
                 error_file.append(dcmpath)
                 continue
-    print('Done moving {} data in {} seconds'.format(cnt, time.time()-st_tol))
+    print('Done moving {} data in {} seconds'.format(cnt, time.time() - st_tol))

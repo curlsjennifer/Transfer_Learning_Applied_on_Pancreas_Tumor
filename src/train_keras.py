@@ -11,6 +11,7 @@ import tensorflow as tf
 import keras
 from keras.backend.tensorflow_backend import set_session
 from keras.preprocessing.image import ImageDataGenerator
+from sklearn.utils import class_weight
 
 
 from utils import load_config, flatten_config_for_logging
@@ -70,11 +71,12 @@ case_partition = convert_csv_to_dict()
 patch_size = config['dataset']['input_dim'][0]
 stride = config['dataset']['stride']
 train_X, train_y = load_patches(
-    config['dataset']['dir'], case_partition['train'], patch_size=patch_size, stride=stride)
+    config['dataset']['dir'], case_partition['train'],
+    patch_size=patch_size, stride=stride)
 print("Finish loading {} patches from {} studies".format(
     train_X.shape[0], len(case_partition['train'])))
 print("With {} lesion patches and {} normal pancreas patches".format(
-    np.sum(train_y), train_X.shape[0]-np.sum(train_y)))
+    np.sum(train_y), train_X.shape[0] - np.sum(train_y)))
 valid_X, valid_y = load_patches(
     config['dataset']['dir'],
     case_partition['validation'],
@@ -82,15 +84,15 @@ valid_X, valid_y = load_patches(
 print("Finish loading {} patches from {} studies".format(
     valid_X.shape[0], len(case_partition['validation'])))
 print("With {} lesion patches and {} normal pancreas patches".format(
-    np.sum(valid_y), valid_X.shape[0]-np.sum(valid_y)))
+    np.sum(valid_y), valid_X.shape[0] - np.sum(valid_y)))
 test_X, test_y = load_patches(
     config['dataset']['dir'], case_partition['test'], patch_size=patch_size)
 
 # Data Generators - Keras
 datagen = ImageDataGenerator(
-    rotation_range=45,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
+    # rotation_range=45,
+    # width_shift_range=0.2,
+    # height_shift_range=0.2,
     horizontal_flip=True,
     fill_mode='constant',
     cval=0.0,
@@ -99,14 +101,10 @@ datagen.fit(train_X)
 
 # Model Init
 model = eval(config['model']['name'])(config['dataset']['input_dim'])
-# model.compile(
-#     loss=keras.losses.binary_crossentropy,
-#     optimizer=keras.optimizers.Adam(lr=config['optimizer']['lr'],
-#                                     amsgrad=True),
-#     metrics=['accuracy'])
 model.compile(
     loss=keras.losses.binary_crossentropy,
-    optimizer=keras.optimizers.Adam(amsgrad=True),
+    optimizer=keras.optimizers.Adam(lr=config['optimizer']['lr'],
+                                    amsgrad=True),
     metrics=['accuracy'])
 cbs = [
     keras.callbacks.ReduceLROnPlateau(
@@ -115,12 +113,15 @@ cbs = [
 ]
 
 # Train and evaluate
+class_weights = class_weight.compute_class_weight(
+    'balanced', np.unique(train_y), train_y)
+print(class_weights)
 history = model.fit_generator(
     datagen.flow(train_X, train_y, batch_size=config['train']['batch_size']),
     epochs=config['train']['epochs'],
     callbacks=cbs,
-    steps_per_epoch=len(train_X)/config['train']['batch_size'],
-    class_weight='auto',
+    steps_per_epoch=len(train_X) / config['train']['batch_size'],
+    class_weight=class_weights,
     validation_data=(valid_X, valid_y))
 
 loss, accuracy = model.evaluate(test_X, test_y)
