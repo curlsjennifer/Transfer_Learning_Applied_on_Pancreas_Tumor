@@ -362,6 +362,142 @@ class DataGenerator_other():
         return tp, fn, fp, tn
 
 
+class DataGenerator_NTUH():
+    def __init__(self, data_path, patch_size, stride=5):
+        self.data_path = data_path
+        self.patch_size = patch_size
+        self.stride = stride
+
+    def load_image(self, case_id, backup_path=''):
+        imagepath = os.path.join(
+            self.data_path, 'image', 'IM_' + case_id + '.nii.gz')
+        labelpath = os.path.join(
+            self.data_path, 'label', 'LB_' + case_id + '.nii.gz')
+        rothpath = os.path.join(backup_path, 'IM_' + case_id + '/IM_' + case_id + '_model.nii.gz')
+
+        image_array = nib.load(imagepath).get_data()
+        if os.path.exists(labelpath):
+            label = nib.load(labelpath).get_data()
+        elif os.path.exists(rothpath):
+            result = nib.load(rothpath).get_data()
+            label = np.zeros(result.shape)
+            label[np.where(result == 8)] = 1
+        else:
+            print("can't find label file!")
+        self.affine = nib.load(imagepath).affine
+        self.thickness = self.affine[2, 2]
+
+        return image_array, label
+
+    def load_boxdata(self, case_id):
+        imagepath = os.path.join(self.data_path, case_id, 'ctscan.npy')
+        pancreaspath = os.path.join(self.data_path, case_id, 'pancreas.npy')
+        lesionpath = os.path.join(self.data_path, case_id, 'lesion.npy')
+        image = np.load(imagepath)
+        pancreas = np.load(pancreaspath)
+        lesion = np.load(lesionpath)
+
+        return image, pancreas, lesion
+
+    def get_boxdata(self, image, label, border=(20, 20, 3)):
+
+        pancreas = np.zeros(label.shape)
+        pancreas[np.where(label != 0)] = 1
+        lesion = np.zeros(label.shape)
+        lesion[np.where(label == 2)] = 1
+
+        if self.thickness < 5:
+            image = finecut_to_thickcut(image, self.thickness)
+            pancreas = finecut_to_thickcut(
+                pancreas, self.thickness, label_mode=True)
+            lesion = finecut_to_thickcut(
+                lesion, self.thickness, label_mode=True)
+
+        xmin, ymin, zmin = np.max(
+            [np.min(np.where(pancreas != 0), 1) - border, (0, 0, 0)], 0)
+        xmax, ymax, zmax = np.min(
+            [np.max(np.where(pancreas != 0), 1) + border, label.shape], 0)
+
+        box_image = image[xmin:xmax, ymin:ymax, zmin:zmax]
+        box_pancreas = pancreas[xmin:xmax, ymin:ymax, zmin:zmax]
+        box_lesion = lesion[xmin:xmax, ymin:ymax, zmin:zmax]
+
+        return box_image, box_pancreas, box_lesion
+
+    def preprocessing(self, image, pancreas, lesion):
+        from skimage import morphology
+
+        image = image[::-1, ::-1, :]
+        pancreas = pancreas[::-1, ::-1, :]
+        lesion = lesion[::-1, ::-1, :]
+
+        pancreas = morphology.dilation(pancreas, np.ones([3, 3, 1]))
+        lesion = morphology.dilation(lesion, np.ones([3, 3, 1]))
+
+        image = windowing(image)
+        image = minmax_normalization(image)
+
+        return image, pancreas, lesion
+
+    def generate_patch(self, image, pancreas, lesion):
+        X = []
+        Y = []
+
+        self.coords = masked_2D_sampler(lesion, pancreas,
+                                        self.patch_size, self.stride, threshold=1 / (self.patch_size ** 2))
+
+        image[np.where(pancreas == 0)] = 0
+
+        for coord in self.coords:
+            mask_pancreas = image[coord[1]
+                                  :coord[4], coord[2]:coord[5], coord[3]]
+            X.append(mask_pancreas)
+            Y.append(coord[0])
+
+        self.X = X
+        self.Y = Y
+
+        return X, Y
+
+    def patch_len(self):
+        return len(self.X)
+
+    def gt_pancreas_num(self):
+        return len(self.Y) - np.sum(self.Y)
+
+    def gt_lesion_num(self):
+        return np.sum(self.Y)
+
+    def get_prediction(self, model, patch_threshold=0.5):
+        from sklearn.metrics import confusion_matrix
+        test_X = np.array(self.X)
+        test_X = test_X.reshape(
+            (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
+        test_Y = np.array(self.Y)
+
+        self.probs = model.predict_proba(test_X)
+        predict_y = predict_binary(self.probs, patch_threshold)
+        self.patch_matrix = confusion_matrix(test_Y, predict_y, labels=[1, 0])
+
+        return self.patch_matrix
+
+    def get_auc(self):
+        from sklearn.metrics import roc_curve, auc
+        fpr, tpr, thresholds = roc_curve(self.Y, self.probs)
+        return auc(fpr, tpr)
+
+    def get_roc_curve(self):
+        from data_description.visualization import plot_roc
+        plot_roc(self.probs, self.Y)
+
+    def get_all_value(self):
+        tp = self.patch_matrix[0][0]
+        fn = self.patch_matrix[0][1]
+        fp = self.patch_matrix[1][0]
+        tn = self.patch_matrix[1][1]
+        return tp, fn, fp, tn
+
+
 def predict_binary(prob, threshold):
     binary = np.zeros(prob.shape)
     binary[prob < threshold] = 0
@@ -557,7 +693,7 @@ def load_patches(data_path, case_list, patch_size=50, stride=5):
     return X, y
 
 
-def convert_csv_to_dict(csv_data_path='/home/d/pancreas/raw_data/data_list.csv'):
+def convert_csv_to_dict(csv_data_path='/data2/pancreas/raw_data/data_list.csv'):
     """extract data list of train, validation, test from csv
     csv_data_path = path to the csv file (ex: '/home/d/pancreas/raw_data/data_list.csv')
     Returns:

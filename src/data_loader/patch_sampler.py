@@ -122,7 +122,7 @@ def masked_2D_sampler(lesion, pancreas, patch_size, stride,
                 y_max = y_min + patch_size
                 if y_max > lesion.shape[1]:
                     y_max = lesion.shape[1]
-                    y_min = y_max - patch_size23
+                    y_min = y_max - patch_size
                 z_min = z
                 z_max = z + 1
                 patch_lesion = lesion[x_min:x_max, y_min:y_max, z_min:z_max]
