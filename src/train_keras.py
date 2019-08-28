@@ -4,7 +4,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 import argparse
-from time import localtime, strftime
+from time import gmtime, strftime, localtime
+import pandas as pd
+from random import shuffle
+import logging
 # from comet_ml import Experiment
 
 import tensorflow as tf
@@ -12,13 +15,13 @@ import keras
 from keras.backend.tensorflow_backend import set_session
 from keras.preprocessing.image import ImageDataGenerator
 from sklearn.utils import class_weight
-
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 from utils import load_config, flatten_config_for_logging
-from data_loader.data_loader import (convert_csv_to_dict,
+from data_loader.data_loader import (DataGenerator_NTUH,
                                      load_patches)
 from models.net_keras import *
-from data_description.visualization import show_train_history
+from data_description.visualization import plot_roc, show_train_history
 
 plt.switch_backend('agg')
 
@@ -40,12 +43,23 @@ else:
     config['run_name'] = args.run_name
 pprint(config)
 
-log_path = os.path.join(config['log']['checkpoint_dir'], config['run_name'])
-if not os.path.isdir(log_path):
-    os.mkdir(log_path)
+# Set log
+log_path = os.path.join(
+    config['log']['checkpoint_dir'], config['run_name'] + '_file.log')
+logging.basicConfig(
+    filename=log_filename,
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+    format='%(levelname)-8s: %(asctime)-12s: %(message)s'
+)
+
+# Set path
 model_path = os.path.join(config['log']['model_dir'], config['run_name'])
 if not os.path.isdir(model_path):
     os.mkdir(model_path)
+result_basepath = os.path.join(config['log']['result_dir'], config['run_name'])
+if not os.path.isdir(result_basepath):
+    os.mkdir(result_basepath)
 
 # Record experiment in Comet.ml
 if args.comet_implement:
@@ -68,11 +82,13 @@ set_session(tf.Session(config=sess_config))
 case_partition = convert_csv_to_dict()
 
 # Get patches
-patch_size = config['dataset']['input_dim'][0]
+patch_size = config['dataset']['patch_dim'][0]
 stride = config['dataset']['stride']
 train_X, train_y = load_patches(
-    config['dataset']['dir'], case_partition['train'],
-    patch_size=patch_size, stride=stride)
+    config['dataset']['dir'],
+    case_partition['train'],
+    patch_size=patch_size,
+    stride=stride)
 print("Finish loading {} patches from {} studies".format(
     train_X.shape[0], len(case_partition['train'])))
 print("With {} lesion patches and {} normal pancreas patches".format(
@@ -85,8 +101,9 @@ print("Finish loading {} patches from {} studies".format(
     valid_X.shape[0], len(case_partition['validation'])))
 print("With {} lesion patches and {} normal pancreas patches".format(
     np.sum(valid_y), valid_X.shape[0] - np.sum(valid_y)))
-test_X, test_y = load_patches(
-    config['dataset']['dir'], case_partition['test'], patch_size=patch_size)
+# test_X, test_y = load_patches(
+#     config['dataset']['dir'], case_partition['test'],
+#     patch_size=patch_size)
 
 # Data Generators - Keras
 datagen = ImageDataGenerator(
