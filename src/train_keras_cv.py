@@ -6,7 +6,6 @@ from tqdm import tqdm
 import argparse
 from time import gmtime, strftime, localtime
 import pandas as pd
-from random import shuffle
 import logging
 
 import tensorflow as tf
@@ -18,7 +17,7 @@ from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 from utils import load_config, flatten_config_for_logging, find_threshold, predict_binary
 from data_loader.data_loader import (DataGenerator_NTUH,
-                                     load_patches)
+                                     load_patches, load_list)
 from models.net_keras import *
 from data_description.visualization import plot_roc, show_train_history
 
@@ -66,50 +65,23 @@ gpu_options = tf.GPUOptions(allow_growth=True)
 sess_config = tf.ConfigProto(gpu_options=gpu_options)
 set_session(tf.Session(config=sess_config))
 
-df = pd.read_csv(config['dataset']['csv'], converters={'add_date': str})
+data_list = load_list(config['dataset']['csv'])
 
-healthy_total = df[(df['type'] == 'healthy')
-                   & (df['diff_patient_list'] == True)]
-healthy_train = list(
-    healthy_total[healthy_total['add_date'] == '20190210']['case_id'])
-healthy_train.remove('AD54')
-healthy_train.remove('AD95')
-healthy_test = list(
-    healthy_total[healthy_total['add_date'] == '20190618']['case_id'])
-healthy_test.remove('AD137')
-healthy_test.remove('AD143')
+amount = int(len(data_list['healthy_train']) / 5)
 
-tumor_total = df[(df['type'] == 'tumor') & (df['diff_patient_list'] == True)]
-tumor_train = list(
-    tumor_total[tumor_total['add_date'] == '20190210']['case_id'])
-tumor_train.remove('PC47')
-tumor_test = list(tumor_total[tumor_total['add_date'] == '20190618']['case_id'])
-tumor_test.remove('PC570')
-tumor_test.remove('PC653')
-
-shuffle(healthy_train)
-shuffle(tumor_train)
-# ==========
-# healthy_train = healthy_train[:5]
-# tumor_train = tumor_train[:5]
-# ==========
-
-amount = int(len(healthy_train) / 5)
-
-case_list = healthy_train + tumor_train
-test_list = healthy_test + tumor_test
+case_list = data_list['healthy_train'] + data_list['tumor_train']
+test_list = data_list['healthy_test'] + data_list['tumor_test']
 
 
 for fold in range(5):
     logging.info("Starting fold {}".format(fold + 1))
     case_partition = {}
     valid_start = fold * amount
-    case_partition['validation'] = healthy_train[valid_start: valid_start + amount] + \
-        tumor_train[valid_start: valid_start + amount]
+    case_partition['validation'] = data_list['healthy_train'][valid_start: valid_start + amount] + \
+        data_list['tumor_train'][valid_start: valid_start + amount]
     logging.info("validation list :{}".format(case_partition['validation']))
     case_partition['train'] = list(
         set(case_list).difference(set(case_partition['validation'])))
-    print(case_partition['train'], case_partition['validation'])
 
     result_path = os.path.join(
         result_basepath, 'fold' + str(fold + 1))
@@ -181,9 +153,6 @@ for fold in range(5):
 
     # Data Generators - Keras
     datagen = ImageDataGenerator(
-        # rotation_range=45,
-        # width_shift_range=0.2,
-        # height_shift_range=0.2,
         horizontal_flip=True,
         fill_mode='constant',
         cval=0.0,

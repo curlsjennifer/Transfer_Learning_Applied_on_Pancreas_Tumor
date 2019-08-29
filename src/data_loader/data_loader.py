@@ -10,8 +10,9 @@ from torch.utils import data
 import keras
 from skimage import morphology, measure
 import tqdm
-import SimpleITK as sitk
+# import SimpleITK as sitk
 import nibabel as nib
+from random import shuffle
 
 from data_loader.patch_sampler import patch_generator
 from data_loader.patch_sampler import masked_2D_sampler
@@ -227,11 +228,11 @@ class DataGenerator_other():
             labelname = 'label' + filename[-4:] + '.nii.gz'
             labelpath = os.path.join(self.data_path, 'annotations', labelname)
 
-            reader = sitk.ImageSeriesReader()
+            # reader = sitk.ImageSeriesReader()
             dicom_names = reader.GetGDCMSeriesFileNames(imagedir)
             reader.SetFileNames(dicom_names)
             image = reader.Execute()
-            image_array = sitk.GetArrayFromImage(image).transpose((2, 1, 0))
+            # image_array = sitk.GetArrayFromImage(image).transpose((2, 1, 0))
             self.thickness = image.GetSpacing()[2]
             label = nib.load(labelpath).get_data()
         elif self.data_type == 'MSD':
@@ -349,6 +350,9 @@ class DataGenerator_other():
         from sklearn.metrics import roc_curve, auc
         fpr, tpr, thresholds = roc_curve(self.Y, self.probs)
         return auc(fpr, tpr)
+
+    def get_probs(self):
+        return self.probs, self.Y
 
     def get_roc_curve(self):
         from data_description.visualization import plot_roc
@@ -489,6 +493,9 @@ class DataGenerator_NTUH():
     def get_roc_curve(self):
         from data_description.visualization import plot_roc
         plot_roc(self.probs, self.Y)
+
+    def get_probs(self):
+        return self.probs, self.Y
 
     def get_all_value(self):
         tp = self.patch_matrix[0][0]
@@ -694,7 +701,9 @@ def load_patches(data_path, case_list, patch_size=50, stride=5):
 
 
 def convert_csv_to_dict(csv_data_path='/data2/pancreas/raw_data/data_list.csv'):
-    """extract data list of train, validation, test from csv
+    """
+    version: 2019/03
+    extract data list of train, validation, test from csv
     csv_data_path = path to the csv file (ex: '/home/d/pancreas/raw_data/data_list.csv')
     Returns:
         dict:   Keys: {all, train, validation, test}
@@ -712,4 +721,43 @@ def convert_csv_to_dict(csv_data_path='/data2/pancreas/raw_data/data_list.csv'):
         list(final_split_df[final_split_df['Class'] == 'validation']['Number']) + \
         list(final_split_df[final_split_df['Class'] == 'test']['Number'])
     print('Finish converting csv to dict')
+    return data_list_dict
+
+
+def load_list(list_path):
+    '''
+    version: 2019/08
+    extract data list of train and test from csv
+    training data: 100 healthy and 100 tumor
+    testing data: 80 healthy and 80 tumor
+    '''
+    df = pd.read_csv(list_path, converters={'add_date': str})
+    data_list_dict = {}
+
+    healthy_total = df[(df['type'] == 'healthy') & (df['diff_patient_list'] == True)]
+    healthy_train = list(
+        healthy_total[healthy_total['add_date'] == '20190210']['case_id'])
+    healthy_train.remove('AD54')
+    healthy_train.remove('AD95')
+    healthy_test = list(
+        healthy_total[healthy_total['add_date'] == '20190618']['case_id'])
+    healthy_test.remove('AD137')
+    healthy_test.remove('AD143')
+
+    tumor_total = df[(df['type'] == 'tumor') & (df['diff_patient_list'] == True)]
+    tumor_train = list(
+        tumor_total[tumor_total['add_date'] == '20190210']['case_id'])
+    tumor_train.remove('PC47')
+    tumor_test = list(tumor_total[tumor_total['add_date'] == '20190618']['case_id'])
+    tumor_test.remove('PC570')
+    tumor_test.remove('PC653')
+
+    shuffle(healthy_train)
+    shuffle(tumor_train)
+
+    data_list_dict['healthy_train'] = healthy_train
+    data_list_dict['healthy_test'] = healthy_test
+    data_list_dict['tumor_train'] = tumor_train
+    data_list_dict['tumor_test'] = tumor_test
+
     return data_list_dict

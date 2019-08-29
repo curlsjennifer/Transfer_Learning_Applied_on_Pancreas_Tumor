@@ -2,6 +2,7 @@ import collections
 import hashlib
 import ruamel.yaml
 from keras import backend as K
+import numpy as np
 
 
 def get_config_sha1(config, digit=5):
@@ -66,7 +67,7 @@ def f1_keras_metric(y_true, y_pred):
         return precision
     precision = precision(y_true, y_pred)
     recall = recall(y_true, y_pred)
-    return 2*((precision*recall)/(precision+recall+K.epsilon()))
+    return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
 
 
 def load_config(path):
@@ -94,7 +95,21 @@ def flatten_config_for_logging(d, parent_key='', sep='_'):
     for k, v in d.items():
         new_key = parent_key + sep + k if parent_key else k
         if isinstance(v, collections.MutableMapping):
-            items.extend(flatten_config_for_logging(v, new_key, sep=sep).items())
+            items.extend(flatten_config_for_logging(
+                v, new_key, sep=sep).items())
         else:
             items.append((new_key, v))
     return dict(items)
+
+
+def predict_binary(prob, threshold):
+    binary = np.zeros(prob.shape)
+    binary[prob < threshold] = 0
+    binary[prob >= threshold] = 1
+    return binary
+
+
+def find_threshold(predict_probs, groundtrue):
+    from sklearn.metrics import roc_curve
+    fpr, tpr, thresholds = roc_curve(groundtrue, predict_probs)
+    return thresholds[np.argmax(1 - fpr + tpr)]
