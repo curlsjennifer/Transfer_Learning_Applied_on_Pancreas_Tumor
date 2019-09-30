@@ -5,14 +5,11 @@ import pickle
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-import torch
-from torch.utils import data
-import keras
-from skimage import morphology, measure
 import tqdm
-# import SimpleITK as sitk
 import nibabel as nib
 from random import shuffle
+import SimpleITK as sitk
+
 
 from data_loader.patch_sampler import patch_generator
 from data_loader.patch_sampler import masked_2D_sampler
@@ -21,199 +18,17 @@ from data_loader.preprocessing import (
 from data_loader.create_boxdata import finecut_to_thickcut
 
 
-def getDataloader(config):
-    case_partition = convert_csv_to_dict(config['dataset']['csv'])
-
-    training_set = Dataset_pytorch(config['dataset']['dir'],
-                                   case_partition['train'],
-                                   config['dataset']['input_dim'][0])
-    training_generator = data.DataLoader(
-        training_set, batch_size=config['train']['batch_size'],
-        shuffle=True, num_workers=config['system']['num_cpu'], pin_memory=True)
-
-    validation_set = Dataset_pytorch(config['dataset']['dir'],
-                                     case_partition['validation'],
-                                     config['dataset']['input_dim'][0])
-    validation_generator = data.DataLoader(
-        validation_set, batch_size=config['validation']['batch_size'],
-        shuffle=False, num_workers=config['system']['num_cpu'], pin_memory=True)
-
-    test_set = Dataset_pytorch(config['dataset']['dir'],
-                               case_partition['test'],
-                               config['dataset']['input_dim'][0])
-    test_generator = data.DataLoader(
-        test_set, batch_size=config['validation']['batch_size'],
-        shuffle=False, num_workers=config['system']['num_cpu'], pin_memory=True)
-
-    dataloaders = {'train': training_generator,
-                   'val': validation_generator, 'test': test_generator}
-
-    return dataloaders
-
-
-class Dataset_pytorch(data.Dataset):
-    """Pytorch Dataset for 2d patch image inheriting torch.utils.data.Dataset
-
-    Args:
-        list_IDs (list): List of patch IDs
-        labels (dict): {patch_id : label}
-        patch_paths (dict): {patch_id : abs. path of patch}
-
-    Attributes:
-        list_IDs (list): List of patch IDs
-        labels (dict): {patch_id : label}
-        patch_paths (dict): {patch_id : abs. path of patch}
-        load_fn(funciton): loading function for images
-
-    """
-
-    def __init__(self, data_path, case_list, patch_size, return_id=False):
-        self.case_list = case_list
-        self.data_path = data_path
-        self.patch_size = patch_size
-        self.return_id = return_id
-
-        self.X, self.labels = load_patches(self.data_path,
-                                           self.case_list,
-                                           self.patch_size)
-        # convert to channel first
-        self.X = np.transpose(self.X, (0, 3, 1, 2))
-
-    def __len__(self):
-        """Get number of data in this dataset
-
-        Returns:
-            int: number of data in this dataset
-        """
-        return len(self.labels)
-
-    def __getitem__(self, index):
-        """Get a data in dataset
-
-        The image is read from disk at patch_paths given the index.
-
-        Args:
-            index (int): index of data
-
-        Returns:
-            X (np array): image of shape (1, image_height, image_width)
-            y (int): lable
-
-        """
-        # Load data and get label
-        X = torch.from_numpy(self.X[index]).to(torch.float)  # channel first
-        y = torch.tensor(self.labels[index]).to(torch.float)
-
-        if self.return_id:
-            return X, y, ID
-        return X, y
-
-
-class DataGenerator_keras(keras.utils.Sequence):
-    """Keras Dataset for 2d patch image inheriting keras.utils.Sequence
-
-    Need multi-thread to avoid bottlebecking at Disk IO since images are read from disk.
-
-    Args:
-        list_IDs (list): List of patch IDs
-        labels (dict): {patch_id : label}
-        patch_paths (dict): {patch_id : abs. path of patch}
-
-        batch_size (int): number of data in each step
-        dim (tuple): dimension of iamge
-        n_channels=1 (int): number of image channel
-        n_classes (int): number of classes
-        shuffle (bool): if shuffle data on epoch ends
-        load_fn (func): loading function for images
-
-    Attributes:
-        same as args
-
-    """
-
-    def __init__(self, X_total, y_total, list_IDs, labels, patch_paths,
-                 batch_size=32, dim=(32, 32), n_channels=1,
-                 n_classes=2, shuffle=False, load_fn=np.load):
-        'Initialization'
-        self.X_total = X_total
-        self.y_total = y_total
-
-        self.list_IDs = list_IDs
-        self.labels = labels
-        self.patch_paths = patch_paths
-
-        self.batch_size = batch_size
-        self.dim = dim
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.shuffle = shuffle
-
-        self.load_fn = load_fn
-
-        self.on_epoch_end()
-
-    def __len__(self):
-        'Denotes the number of batches per epoch'
-        return int(np.floor(len(self.list_IDs) / self.batch_size))
-
-    def __getitem__(self, index):
-        'Generate one batch of data'
-        # Generate indexes of the batch
-        indexes = self.indexes[index
-                               * self.batch_size:(index + 1) * self.batch_size]
-
-        # Find list of IDs
-        list_IDs_temp = [self.list_IDs[k] for k in indexes]
-
-        # Generate data
-        X, y = self.__data_generation(indexes)
-        # X, y = self.__data_generation(list_IDs_temp)
-
-        return X, y
-
-    def on_epoch_end(self):
-        'Updates indexes after each epoch'
-        self.indexes = np.arange(len(self.list_IDs))
-        if self.shuffle is True:
-            np.random.shuffle(self.indexes)
-
-    def __data_generation(self, indexes):
-        # X : (n_samples, *dim, n_channels)
-        'Generates data containing batch_size samples'
-        # Initialization
-        X = np.empty((self.batch_size, *self.dim, self.n_channels),
-                     dtype=np.float32)  # channel last
-        y = np.empty((self.batch_size), dtype=int)
-
-        # Generate data
-        for i, index in enumerate(indexes):
-            # Store sample
-            X[i, ] = self.X_total[index]  # channel last
-
-            # Store class
-            y[i] = self.y_total[index]
-
-        return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
-
-    # def __data_generation(self, list_IDs_temp):
-    #     # X : (n_samples, *dim, n_channels)
-    #     'Generates data containing batch_size samples'
-    #     # Initialization
-    #     X = np.empty((self.batch_size, *self.dim, self.n_channels), dtype=np.float32)  # channel last
-    #     y = np.empty((self.batch_size), dtype=int)
-
-    #     # Generate data
-    #     for i, ID in enumerate(list_IDs_temp):
-    #         # Store sample
-    #         X[i, ] = self.load_fn(self.patch_paths[ID])[:, :, np.newaxis]  # channel last
-
-    #         # Store class
-    #         y[i] = self.labels[ID]
-
-    #     return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
-
-
 class DataGenerator_other():
+    '''
+    Data generator for external dataset
+    Args:
+        data_path (str): Pancreas-CT: '/home/d/pancreas/Pancreas-CT/'
+                         MSD: '/home/d/pancreas/MSD/Task07_Pancreas/'
+        patch_size (int): patch size
+        stride (int): distance of moving window
+        data_type (str): 'MSD' or 'Pancreas-CT'
+    '''
+
     def __init__(self, data_path, patch_size, stride=5, data_type='MSD'):
         self.data_path = data_path
         self.patch_size = patch_size
@@ -228,13 +43,14 @@ class DataGenerator_other():
             labelname = 'label' + filename[-4:] + '.nii.gz'
             labelpath = os.path.join(self.data_path, 'annotations', labelname)
 
-            # reader = sitk.ImageSeriesReader()
+            reader = sitk.ImageSeriesReader()
             dicom_names = reader.GetGDCMSeriesFileNames(imagedir)
             reader.SetFileNames(dicom_names)
             image = reader.Execute()
-            # image_array = sitk.GetArrayFromImage(image).transpose((2, 1, 0))
+            image_array = sitk.GetArrayFromImage(image).transpose((2, 1, 0))
             self.thickness = image.GetSpacing()[2]
             label = nib.load(labelpath).get_data()
+
         elif self.data_type == 'MSD':
             imagepath = os.path.join(self.data_path, 'imagesTr', filename)
             labelpath = os.path.join(self.data_path, 'labelsTr', filename)
@@ -246,9 +62,7 @@ class DataGenerator_other():
 
         return image_array, label
 
-    def get_boxdata(self, filename, border=(10, 10, 3)):
-
-        image, label = self.load_image(filename)
+    def get_boxdata(self, image, label, border=(10, 10, 3)):
 
         pancreas = np.zeros(label.shape)
         pancreas[np.where(label != 0)] = 1
@@ -274,9 +88,8 @@ class DataGenerator_other():
 
         return box_image, box_pancreas, box_lesion
 
-    def preprocessing(self, filename):
+    def preprocessing(self, image, pancreas, lesion):
         from skimage import morphology
-        image, pancreas, lesion = self.get_boxdata(filename)
 
         if self.data_type == 'Pancreas-CT':
             image = image[:, ::-1, :]
@@ -297,21 +110,18 @@ class DataGenerator_other():
 
         return image, pancreas, lesion
 
-    def generate_patch(self, filename):
+    def generate_patch(self, image, pancreas, lesion):
         X = []
         Y = []
 
-        self.box_image, self.box_pancreas, self.box_lesion = self.preprocessing(
-            filename)
-
-        self.coords = masked_2D_sampler(self.box_lesion, self.box_pancreas,
+        self.coords = masked_2D_sampler(lesion, pancreas,
                                         self.patch_size, self.stride, threshold=1 / (self.patch_size ** 2))
 
-        self.box_image[np.where(self.box_pancreas == 0)] = 0
+        image[np.where(pancreas == 0)] = 0
 
         for coord in self.coords:
-            mask_pancreas = self.box_image[coord[1]
-                                           :coord[4], coord[2]:coord[5], coord[3]]
+            mask_pancreas = image[coord[1]
+                                  :coord[4], coord[2]:coord[5], coord[3]]
             X.append(mask_pancreas)
             Y.append(coord[0])
 
@@ -329,9 +139,8 @@ class DataGenerator_other():
     def gt_lesion_num(self):
         return np.sum(self.Y)
 
-    def get_prediction(self, filename, model, patch_threshold=0.5):
+    def get_prediction(self, model, patch_threshold=0.5):
         from sklearn.metrics import confusion_matrix
-        X, Y = self.generate_patch(filename)
         if len(self.X) > 0:
             test_X = np.array(self.X)
             test_X = test_X.reshape(
@@ -377,7 +186,8 @@ class DataGenerator_NTUH():
             self.data_path, 'image', 'IM_' + case_id + '.nii.gz')
         labelpath = os.path.join(
             self.data_path, 'label', 'LB_' + case_id + '.nii.gz')
-        rothpath = os.path.join(backup_path, 'IM_' + case_id + '/IM_' + case_id + '_model.nii.gz')
+        rothpath = os.path.join(backup_path, 'IM_'
+                                + case_id + '/IM_' + case_id + '_model.nii.gz')
 
         image_array = nib.load(imagepath).get_data()
         if os.path.exists(labelpath):
@@ -534,8 +344,8 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path=None, test_
     print('SPLIT_SAVE_CASE_PARTITION:\tStart spliting cases...')
 
     partition = {}
-    partition['all'] = case_list
     if test_cases is None:
+        partition['all'] = case_list
         # load case list and spilt to 3 part
         print('SPLIT_SAVE_CASE_PARTITION:\tTarget Partition Ratio: (train, val, test)={}'.format(ratio))
         partition['train'], partition['test'] = train_test_split(
@@ -544,10 +354,12 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path=None, test_
             partition['train'], test_size=ratio[1] / (ratio[0] + ratio[1]), random_state=random_seed)
     elif type(test_cases) is list:
         # load predifined test cases
+        partition['all'] = list(set(case_list + test_cases))
         print('SPLIT_SAVE_CASE_PARTITION:\tUsing PREDEFINED TEST CASES')
-        partition['validation'] = test_cases
-        partition['test'] = []
-        partition['train'] = list(set(case_list) - set(test_cases))
+        partition['test'] = test_cases
+        train_case = list(set(case_list) - set(test_cases))
+        partition['train'], partition['validation'] = train_test_split(
+            train_case, test_size=ratio[1] / (ratio[0] + ratio[1]), random_state=random_seed)
     else:
         raise TypeError(
             "test_cases expected to be \"list\", instead got {}".format(type(test_cases)))
@@ -555,9 +367,8 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path=None, test_
     # report actual partition ratio
     num_parts = list(map(len, [partition[part]
                                for part in ['train', 'validation', 'test']]))
-    real_ratio = np.array(num_parts) / sum(num_parts)
-    print('SPLIT_SAVE_CASE_PARTITION:\tActual Partition Ratio: (train, val, test)={}'.format(
-        (real_ratio)))
+    print('SPLIT_SAVE_CASE_PARTITION:\tActual Partition Number: (train, val, test)={}'.format(
+        (num_parts)))
 
     print('SPLIT_SAVE_CASE_PARTITION:\tDone Partition')
     # saving partition dict to disk
@@ -734,7 +545,8 @@ def load_list(list_path):
     df = pd.read_csv(list_path, converters={'add_date': str})
     data_list_dict = {}
 
-    healthy_total = df[(df['type'] == 'healthy') & (df['diff_patient_list'] == True)]
+    healthy_total = df[(df['type'] == 'healthy')
+                       & (df['diff_patient_list'] == True)]
     healthy_train = list(
         healthy_total[healthy_total['add_date'] == '20190210']['case_id'])
     healthy_train.remove('AD54')
@@ -744,11 +556,13 @@ def load_list(list_path):
     healthy_test.remove('AD137')
     healthy_test.remove('AD143')
 
-    tumor_total = df[(df['type'] == 'tumor') & (df['diff_patient_list'] == True)]
+    tumor_total = df[(df['type'] == 'tumor') & (
+        df['diff_patient_list'] == True)]
     tumor_train = list(
         tumor_total[tumor_total['add_date'] == '20190210']['case_id'])
     tumor_train.remove('PC47')
-    tumor_test = list(tumor_total[tumor_total['add_date'] == '20190618']['case_id'])
+    tumor_test = list(
+        tumor_total[tumor_total['add_date'] == '20190618']['case_id'])
     tumor_test.remove('PC570')
     tumor_test.remove('PC653')
 
