@@ -22,8 +22,8 @@ class DataGenerator_other():
     '''
     Data generator for external dataset
     Args:
-        data_path (str): Pancreas-CT: '/home/d/pancreas/Pancreas-CT/'
-                         MSD: '/home/d/pancreas/MSD/Task07_Pancreas/'
+        data_path (str): Pancreas-CT: '/data/pancreas/Pancreas-CT/'
+                         MSD: '/data/pancreas/MSD/Task07_Pancreas/'
         patch_size (int): patch size
         stride (int): distance of moving window
         data_type (str): 'MSD' or 'Pancreas-CT'
@@ -186,6 +186,8 @@ class DataGenerator_NTUH():
             self.data_path, 'image', 'IM_' + case_id + '.nii.gz')
         labelpath = os.path.join(
             self.data_path, 'label', 'LB_' + case_id + '.nii.gz')
+        # labelpath = os.path.join('/data2/pancreas/results/unetVae/NTUH',
+        #                          'IM_' + case_id, 'IM_' + case_id + '_model.nii.gz')
         rothpath = os.path.join(backup_path, 'IM_'
                                 + case_id + '/IM_' + case_id + '_model.nii.gz')
 
