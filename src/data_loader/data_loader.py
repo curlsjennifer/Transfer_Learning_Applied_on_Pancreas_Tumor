@@ -18,24 +18,28 @@ from data_loader.preprocessing import (
 from data_loader.create_boxdata import finecut_to_thickcut
 
 
-class DataGenerator_other():
+class DataGenerator():
     '''
     Data generator for external dataset
     Args:
-        data_path (str): Pancreas-CT: '/data/pancreas/Pancreas-CT/'
-                         MSD: '/data/pancreas/MSD/Task07_Pancreas/'
         patch_size (int): patch size
         stride (int): distance of moving window
-        data_type (str): 'MSD' or 'Pancreas-CT'
+        data_type (str): 'NTUH' or 'MSD' or 'Pancreas-CT'
     '''
 
-    def __init__(self, data_path, patch_size, stride=5, data_type='MSD'):
-        self.data_path = data_path
+    def __init__(self, patch_size=50, stride=5, data_type='MSD'):
         self.patch_size = patch_size
         self.stride = stride
         self.data_type = data_type
+        if data_type == 'Pancreas-CT':
+            self.data_path = '/data/pancreas/Pancreas-CT/'
+        elif data_type == 'MSD':
+            self.data_path = '/data/pancreas/MSD/Task07_Pancreas/'
+        elif data_type == 'NTUH':
+            self.data_path = '/data2/pancreas/Nifti_data/'
 
     def load_image(self, filename):
+        self.filename = filename
         if self.data_type == 'Pancreas-CT':
             file_location = glob.glob(os.path.join(
                 self.data_path, filename) + '/*/*/000001.dcm')
@@ -55,21 +59,44 @@ class DataGenerator_other():
             imagepath = os.path.join(self.data_path, 'imagesTr', filename)
             labelpath = os.path.join(self.data_path, 'labelsTr', filename)
 
-            image_array = nib.load(imagepath).get_data()
+            img = nib.load(imagepath)
+            image_array = img.get_data()
             label = nib.load(labelpath).get_data()
-            self.affine = nib.load(imagepath).affine
-            self.thickness = self.affine[2, 2]
+            self.thickness = img.affine[2, 2]
+
+        elif self.data_type == 'NTUH':
+            imagepath = os.path.join(
+                self.data_path, 'image', 'IM_' + filename + '.nii.gz')
+            labelpath = os.path.join(
+                self.data_path, 'label', 'LB_' + filename + '.nii.gz')
+            backup_path = '/data2/pancreas/results/image_AD/'
+            rothpath = os.path.join(backup_path, 'IM_'
+                                    + filename + '/IM_' + filename + '_model.nii.gz')
+
+            img = nib.load(imagepath)
+            image_array = img.get_data()
+            if os.path.exists(labelpath):
+                label = nib.load(labelpath).get_data()
+            elif os.path.exists(rothpath):
+                result = nib.load(rothpath).get_data()
+                label = np.zeros(result.shape)
+                label[np.where(result == 8)] = 1
+            else:
+                print("can't find label file!{}".format(rothpath))
+            self.thickness = img.affine[2, 2]
 
         return image_array, label
 
     def get_boxdata(self, image, label, border=(10, 10, 3)):
 
+        # Transfer label
         pancreas = np.zeros(label.shape)
         pancreas[np.where(label != 0)] = 1
         lesion = np.zeros(label.shape)
-        if self.data_type == 'MSD':
+        if self.data_type == 'MSD' or self.data_type == 'NTUH':
             lesion[np.where(label == 2)] = 1
 
+        # Finecut to thickcut
         if self.thickness < 5:
             image = finecut_to_thickcut(image, self.thickness)
             pancreas = finecut_to_thickcut(
@@ -77,11 +104,13 @@ class DataGenerator_other():
             lesion = finecut_to_thickcut(
                 lesion, self.thickness, label_mode=True)
 
+        # Generate box index
         xmin, ymin, zmin = np.max(
             [np.min(np.where(pancreas != 0), 1) - border, (0, 0, 0)], 0)
         xmax, ymax, zmax = np.min(
             [np.max(np.where(pancreas != 0), 1) + border, label.shape], 0)
 
+        # Generate box data
         box_image = image[xmin:xmax, ymin:ymax, zmin:zmax]
         box_pancreas = pancreas[xmin:xmax, ymin:ymax, zmin:zmax]
         box_lesion = lesion[xmin:xmax, ymin:ymax, zmin:zmax]
@@ -98,6 +127,10 @@ class DataGenerator_other():
             pancreas = smoothing(pancreas)
             lesion = smoothing(lesion)
         elif self.data_type == 'MSD':
+            image = image[::-1, ::-1, :]
+            pancreas = pancreas[::-1, ::-1, :]
+            lesion = lesion[::-1, ::-1, :]
+        elif self.data_type == 'NTUH':
             image = image[::-1, ::-1, :]
             pancreas = pancreas[::-1, ::-1, :]
             lesion = lesion[::-1, ::-1, :]
@@ -175,146 +208,146 @@ class DataGenerator_other():
         return tp, fn, fp, tn
 
 
-class DataGenerator_NTUH():
-    def __init__(self, data_path, patch_size, stride=5):
-        self.data_path = data_path
-        self.patch_size = patch_size
-        self.stride = stride
+# class DataGenerator_NTUH():
+#     def __init__(self, data_path, patch_size, stride=5):
+#         self.data_path = data_path
+#         self.patch_size = patch_size
+#         self.stride = stride
 
-    def load_image(self, case_id, backup_path=''):
-        imagepath = os.path.join(
-            self.data_path, 'image', 'IM_' + case_id + '.nii.gz')
-        labelpath = os.path.join(
-            self.data_path, 'label', 'LB_' + case_id + '.nii.gz')
-        # labelpath = os.path.join('/data2/pancreas/results/unetVae/NTUH',
-        #                          'IM_' + case_id, 'IM_' + case_id + '_model.nii.gz')
-        rothpath = os.path.join(backup_path, 'IM_'
-                                + case_id + '/IM_' + case_id + '_model.nii.gz')
+#     def load_image(self, case_id, backup_path=''):
+#         imagepath = os.path.join(
+#             self.data_path, 'image', 'IM_' + case_id + '.nii.gz')
+#         labelpath = os.path.join(
+#             self.data_path, 'label', 'LB_' + case_id + '.nii.gz')
+#         # labelpath = os.path.join('/data2/pancreas/results/unetVae/NTUH',
+#         #                          'IM_' + case_id, 'IM_' + case_id + '_model.nii.gz')
+#         rothpath = os.path.join(backup_path, 'IM_'
+#                                 + case_id + '/IM_' + case_id + '_model.nii.gz')
 
-        image_array = nib.load(imagepath).get_data()
-        if os.path.exists(labelpath):
-            label = nib.load(labelpath).get_data()
-        elif os.path.exists(rothpath):
-            result = nib.load(rothpath).get_data()
-            label = np.zeros(result.shape)
-            label[np.where(result == 8)] = 1
-        else:
-            print("can't find label file!")
-        self.affine = nib.load(imagepath).affine
-        self.thickness = self.affine[2, 2]
+#         image_array = nib.load(imagepath).get_data()
+#         if os.path.exists(labelpath):
+#             label = nib.load(labelpath).get_data()
+#         elif os.path.exists(rothpath):
+#             result = nib.load(rothpath).get_data()
+#             label = np.zeros(result.shape)
+#             label[np.where(result == 8)] = 1
+#         else:
+#             print("can't find label file!")
+#         self.affine = nib.load(imagepath).affine
+#         self.thickness = self.affine[2, 2]
 
-        return image_array, label
+#         return image_array, label
 
-    def load_boxdata(self, case_id):
-        imagepath = os.path.join(self.data_path, case_id, 'ctscan.npy')
-        pancreaspath = os.path.join(self.data_path, case_id, 'pancreas.npy')
-        lesionpath = os.path.join(self.data_path, case_id, 'lesion.npy')
-        image = np.load(imagepath)
-        pancreas = np.load(pancreaspath)
-        lesion = np.load(lesionpath)
+#     def load_boxdata(self, case_id):
+#         imagepath = os.path.join(self.data_path, case_id, 'ctscan.npy')
+#         pancreaspath = os.path.join(self.data_path, case_id, 'pancreas.npy')
+#         lesionpath = os.path.join(self.data_path, case_id, 'lesion.npy')
+#         image = np.load(imagepath)
+#         pancreas = np.load(pancreaspath)
+#         lesion = np.load(lesionpath)
 
-        return image, pancreas, lesion
+#         return image, pancreas, lesion
 
-    def get_boxdata(self, image, label, border=(20, 20, 3)):
+#     def get_boxdata(self, image, label, border=(20, 20, 3)):
 
-        pancreas = np.zeros(label.shape)
-        pancreas[np.where(label != 0)] = 1
-        lesion = np.zeros(label.shape)
-        lesion[np.where(label == 2)] = 1
+#         pancreas = np.zeros(label.shape)
+#         pancreas[np.where(label != 0)] = 1
+#         lesion = np.zeros(label.shape)
+#         lesion[np.where(label == 2)] = 1
 
-        if self.thickness < 5:
-            image = finecut_to_thickcut(image, self.thickness)
-            pancreas = finecut_to_thickcut(
-                pancreas, self.thickness, label_mode=True)
-            lesion = finecut_to_thickcut(
-                lesion, self.thickness, label_mode=True)
+#         if self.thickness < 5:
+#             image = finecut_to_thickcut(image, self.thickness)
+#             pancreas = finecut_to_thickcut(
+#                 pancreas, self.thickness, label_mode=True)
+#             lesion = finecut_to_thickcut(
+#                 lesion, self.thickness, label_mode=True)
 
-        xmin, ymin, zmin = np.max(
-            [np.min(np.where(pancreas != 0), 1) - border, (0, 0, 0)], 0)
-        xmax, ymax, zmax = np.min(
-            [np.max(np.where(pancreas != 0), 1) + border, label.shape], 0)
+#         xmin, ymin, zmin = np.max(
+#             [np.min(np.where(pancreas != 0), 1) - border, (0, 0, 0)], 0)
+#         xmax, ymax, zmax = np.min(
+#             [np.max(np.where(pancreas != 0), 1) + border, label.shape], 0)
 
-        box_image = image[xmin:xmax, ymin:ymax, zmin:zmax]
-        box_pancreas = pancreas[xmin:xmax, ymin:ymax, zmin:zmax]
-        box_lesion = lesion[xmin:xmax, ymin:ymax, zmin:zmax]
+#         box_image = image[xmin:xmax, ymin:ymax, zmin:zmax]
+#         box_pancreas = pancreas[xmin:xmax, ymin:ymax, zmin:zmax]
+#         box_lesion = lesion[xmin:xmax, ymin:ymax, zmin:zmax]
 
-        return box_image, box_pancreas, box_lesion
+#         return box_image, box_pancreas, box_lesion
 
-    def preprocessing(self, image, pancreas, lesion):
-        from skimage import morphology
+#     def preprocessing(self, image, pancreas, lesion):
+#         from skimage import morphology
 
-        image = image[::-1, ::-1, :]
-        pancreas = pancreas[::-1, ::-1, :]
-        lesion = lesion[::-1, ::-1, :]
+#         image = image[::-1, ::-1, :]
+#         pancreas = pancreas[::-1, ::-1, :]
+#         lesion = lesion[::-1, ::-1, :]
 
-        pancreas = morphology.dilation(pancreas, np.ones([3, 3, 1]))
-        lesion = morphology.dilation(lesion, np.ones([3, 3, 1]))
+#         pancreas = morphology.dilation(pancreas, np.ones([3, 3, 1]))
+#         lesion = morphology.dilation(lesion, np.ones([3, 3, 1]))
 
-        image = windowing(image)
-        image = minmax_normalization(image)
+#         image = windowing(image)
+#         image = minmax_normalization(image)
 
-        return image, pancreas, lesion
+#         return image, pancreas, lesion
 
-    def generate_patch(self, image, pancreas, lesion):
-        X = []
-        Y = []
+#     def generate_patch(self, image, pancreas, lesion):
+#         X = []
+#         Y = []
 
-        self.coords = masked_2D_sampler(lesion, pancreas,
-                                        self.patch_size, self.stride, threshold=1 / (self.patch_size ** 2))
+#         self.coords = masked_2D_sampler(lesion, pancreas,
+#                                         self.patch_size, self.stride, threshold=1 / (self.patch_size ** 2))
 
-        image[np.where(pancreas == 0)] = 0
+#         image[np.where(pancreas == 0)] = 0
 
-        for coord in self.coords:
-            mask_pancreas = image[coord[1]
-                                  :coord[4], coord[2]:coord[5], coord[3]]
-            X.append(mask_pancreas)
-            Y.append(coord[0])
+#         for coord in self.coords:
+#             mask_pancreas = image[coord[1]
+#                                   :coord[4], coord[2]:coord[5], coord[3]]
+#             X.append(mask_pancreas)
+#             Y.append(coord[0])
 
-        self.X = X
-        self.Y = Y
+#         self.X = X
+#         self.Y = Y
 
-        return X, Y
+#         return X, Y
 
-    def patch_len(self):
-        return len(self.X)
+#     def patch_len(self):
+#         return len(self.X)
 
-    def gt_pancreas_num(self):
-        return len(self.Y) - np.sum(self.Y)
+#     def gt_pancreas_num(self):
+#         return len(self.Y) - np.sum(self.Y)
 
-    def gt_lesion_num(self):
-        return np.sum(self.Y)
+#     def gt_lesion_num(self):
+#         return np.sum(self.Y)
 
-    def get_prediction(self, model, patch_threshold=0.5):
-        from sklearn.metrics import confusion_matrix
-        test_X = np.array(self.X)
-        test_X = test_X.reshape(
-            (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
-        test_Y = np.array(self.Y)
+#     def get_prediction(self, model, patch_threshold=0.5):
+#         from sklearn.metrics import confusion_matrix
+#         test_X = np.array(self.X)
+#         test_X = test_X.reshape(
+#             (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
+#         test_Y = np.array(self.Y)
 
-        self.probs = model.predict_proba(test_X)
-        predict_y = predict_binary(self.probs, patch_threshold)
-        self.patch_matrix = confusion_matrix(test_Y, predict_y, labels=[1, 0])
+#         self.probs = model.predict_proba(test_X)
+#         predict_y = predict_binary(self.probs, patch_threshold)
+#         self.patch_matrix = confusion_matrix(test_Y, predict_y, labels=[1, 0])
 
-        return self.patch_matrix
+#         return self.patch_matrix
 
-    def get_auc(self):
-        from sklearn.metrics import roc_curve, auc
-        fpr, tpr, thresholds = roc_curve(self.Y, self.probs)
-        return auc(fpr, tpr)
+#     def get_auc(self):
+#         from sklearn.metrics import roc_curve, auc
+#         fpr, tpr, thresholds = roc_curve(self.Y, self.probs)
+#         return auc(fpr, tpr)
 
-    def get_roc_curve(self):
-        from data_description.visualization import plot_roc
-        plot_roc(self.probs, self.Y)
+#     def get_roc_curve(self):
+#         from data_description.visualization import plot_roc
+#         plot_roc(self.probs, self.Y)
 
-    def get_probs(self):
-        return self.probs, self.Y
+#     def get_probs(self):
+#         return self.probs, self.Y
 
-    def get_all_value(self):
-        tp = self.patch_matrix[0][0]
-        fn = self.patch_matrix[0][1]
-        fp = self.patch_matrix[1][0]
-        tn = self.patch_matrix[1][1]
-        return tp, fn, fp, tn
+#     def get_all_value(self):
+#         tp = self.patch_matrix[0][0]
+#         fn = self.patch_matrix[0][1]
+#         fp = self.patch_matrix[1][0]
+#         tn = self.patch_matrix[1][1]
+#         return tp, fn, fp, tn
 
 
 def predict_binary(prob, threshold):
@@ -383,11 +416,8 @@ def split_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path=None, test_
     return partition
 
 
-def fix_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_seed=None):
-    """Fixing test case
-
-    TODO: ratio
-    Splting all cases to train, val, test part
+def split_case_partition(case_list, value=(10, 10, 10), path=None, test_cases=None, random_seed=None):
+    """Splting all cases to train, val, test part
 
     If path is not empty str, partition dict is saved for reproducibility.
 
@@ -395,6 +425,7 @@ def fix_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_se
         case_list (list): The list contains case name.
         ratio (tup): Data split ratio. SHOULD sum to 1. (train, val, test) Defaults to (.8, .1, .1).
         path (str): Path to Save the partition dict for reproducibility.
+        test_cases (list): For fixing the testing cases.
         random_seed (int): Random Seed.
 
 
@@ -403,30 +434,33 @@ def fix_save_case_partition(case_list, ratio=(0.8, 0.1, 0.1), path='', random_se
                 Values: list of cases
 
     """
+    import random
+    print('SPLIT_CASE_PARTITION:\tStart spliting cases...')
 
-    print('SPLIT_SAVE_CASE_PARTITION:\tStart spliting cases...')
+    assert (value[0] + value[1] + value[2]
+            ) < len(case_list) + 1, 'SPLIT_CASE_PARTITION:\ttotal length exceed!'
 
-    # load case list and spilt to 3 part
     partition = {}
-    partition['all'] = case_list
-    partition['test'] = ['NP4', 'NP8', 'NP2', 'NP9', 'NP10',
-                         'AD20', 'AD110', 'AD29', 'AD92', 'AD87',
-                         'PT13', 'PT35', 'PT2', 'PT36', 'PT42',
-                         'PC83', 'PC39', 'PC79', 'PC73', 'PC72']
-    partition['train'] = [i for i in partition['all']
-                          if i not in partition['test']]
-    partition['train'], partition['validation'] = train_test_split(
-        partition['train'], test_size=ratio[1] / (ratio[0] + ratio[1]),
-        random_state=random_seed)
+    random.Random(random_seed).shuffle(case_list)
+    if test_cases is None:
+        partition['all'] = case_list[: value[0] + value[1] + value[2]]
+        partition['test'] = case_list[: value[2]]
+        partition['validation'] = case_list[value[2] : value[1] + value[2]]
+        partition['train'] = case_list[value[1]
+                                       + value[2] : value[0] + value[1] + value[2]]
+    else:
+        raise TypeError(
+            "test_cases expected to be \"list\", instead got {}".format(type(test_cases)))
 
     # report actual partition ratio
     num_parts = list(map(len, [partition[part]
                                for part in ['train', 'validation', 'test']]))
-    real_ratio = np.array(num_parts) / sum(num_parts)
+    print('SPLIT_CASE_PARTITION:\tActual Partition Number: (train, val, test)={}'.format(
+        (num_parts)))
 
-    print('SPLIT_SAVE_CASE_PARTITION:\tDone Partition')
+    print('SPLIT_CASE_PARTITION:\tDone Partition')
     # saving partition dict to disk
-    if path != "":
+    if path is not None:
         print('SPLIT_SAVE_CASE_PARTITION:\tStart saving partition dict to {}'.format(path))
         with open(path, 'wb') as f:
             pickle.dump(partition, f, pickle.HIGHEST_PROTOCOL)
@@ -577,3 +611,52 @@ def load_list(list_path):
     data_list_dict['tumor_test'] = tumor_test
 
     return data_list_dict
+
+
+def generate_case_partition(config):
+    '''
+    Version: 2019/11
+    extract NTUH data list from csv
+    extract MSD, Pancreas-CT data list
+    '''
+
+    list_path = config['dataset']['csv']
+    df = pd.read_csv(list_path, converters={'add_date': str})
+
+    healthy_list = list(df[(df['type'] == 'healthy')
+                           & (df['diff_patient_list'])]['case_id'])
+
+    tumor_list = list(df[(df['type'] == 'tumor')
+                         & (df['diff_patient_list'])]['case_id'])
+
+    healthy_partition = split_case_partition(
+        healthy_list, value=config['dataset']['NTUH_split'], random_seed=config['dataset']['seed'])
+
+    tumor_partition = split_case_partition(
+        tumor_list, value=config['dataset']['NTUH_split'], random_seed=config['dataset']['seed'])
+
+    ntu_partition = {}
+    ntu_partition['validation'] = healthy_partition['validation'] + \
+        tumor_partition['validation']
+    ntu_partition['train'] = healthy_partition['train'] + \
+        tumor_partition['train']
+    ntu_partition['test'] = healthy_partition['test'] + tumor_partition['test']
+
+    data_path_pancreasct = '/data/pancreas/Pancreas-CT/'
+    data_path_msd = '/data/pancreas/MSD/Task07_Pancreas/'
+
+    tcia_list = os.listdir(data_path_pancreasct)
+    for filename in tcia_list:
+        if not filename[0] == 'P':
+            tcia_list.remove(filename)
+    tcia_partition = split_case_partition(
+        tcia_list, value=config['dataset']['PancreasCT_split'], random_seed=config['dataset']['seed'])
+
+    msd_list = os.listdir(os.path.join(data_path_msd, 'imagesTr'))
+    for filename in msd_list:
+        if not filename[0] == 'p':
+            msd_list.remove(filename)
+    msd_partition = split_case_partition(
+        msd_list, value=config['dataset']['MSD_split'], random_seed=config['dataset']['seed'])
+
+    return ntu_partition, tcia_partition, msd_partition
