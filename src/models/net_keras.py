@@ -1,6 +1,9 @@
 import keras
 from keras.models import Sequential
 from keras.layers import Conv2D, Flatten, MaxPooling2D, Dropout, Dense
+# import tensorflow.keras as keras
+# from tensorflow.keras.models import Sequential
+# from tensorflow.keras.layers import Conv2D, Flatten, MaxPooling2D, Dropout, Dense
 import tensorflow as tf
 
 '''
@@ -8,8 +11,8 @@ import tensorflow as tf
 '''
 
 
-# class TensorProjectionLayer(tf.keras.layers.Layer):
-class TensorProjectionLayer(keras.layers.Layer):
+class TensorProjectionLayer(tf.keras.layers.Layer):
+    # class TensorProjectionLayer(keras.layers.Layer):
     '''
     From Juncheng for SVD
     '''
@@ -171,21 +174,6 @@ def simple_cnn_sigmoid_SVD(input_shape):
     return model
 
 
-def simple_cnn_softmax(input_shape, num_classes=2):
-    model = Sequential()
-    model.add(Conv2D(32, kernel_size=(3, 3), activation='relu',
-                     input_shape=input_shape))
-    model.add(Conv2D(64, (3, 3), activation='relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
-    model.add(Flatten())
-    model.add(Dense(128, activation='relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(num_classes, activation='softmax'))
-
-    return model
-
-
 def simple_cnn_sigmoid(input_shape):
     model = Sequential()
     model.add(Conv2D(16, kernel_size=(5, 5), activation='relu',
@@ -204,6 +192,21 @@ def simple_cnn_sigmoid(input_shape):
     model.add(Dense(32, activation='relu'))
 
     model.add(Dense(1, activation='sigmoid'))
+
+    return model
+
+
+def simple_cnn_softmax(input_shape, num_classes=2):
+    model = Sequential()
+    model.add(Conv2D(32, kernel_size=(3, 3), activation='relu',
+                     input_shape=input_shape))
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+    model.add(Flatten())
+    model.add(Dense(128, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(num_classes, activation='softmax'))
 
     return model
 
