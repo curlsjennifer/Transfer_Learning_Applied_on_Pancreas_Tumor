@@ -12,6 +12,8 @@ log:
 
 model:  
     name: 'simple_cnn_sigmoid'
+    fix_layer: 0
+    origin_name: 'test_mix_right_5'
 
 optimizer:
     lr: +1e-3 # default: +1e-3
@@ -29,9 +31,16 @@ dataset:
     holger: '/data2/pancreas/results/tmp'
     input_dim: [50, 50, 1]  # HWC
     stride: 25
-    NTUH_split: [240, 20, 40]
-    MSD_split: [240, 20, 20]
-    PancreasCT_split: [40, 20, 20]
+
+    NTUH_split_H: [240, 80, 0]
+    NTUH_split_C: [240, 80, 0]
+    PancreasCT_split: [0, 0, 17]
+    MSD_split: [0, 0, 56]
+    #NTUH_split_H: [0, 0, 80]
+    #NTUH_split_C: [0, 0, 80]
+    #PancreasCT_split: [12, 4, 17]
+    #MSD_split: [42, 14, 56]
+    
     seed: 1
     load: 'box'
 

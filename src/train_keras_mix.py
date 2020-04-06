@@ -60,11 +60,11 @@ logging.basicConfig(
 # Set path
 model_path = os.path.join(config['log']['model_dir'], config['run_name'])
 if not os.path.isdir(model_path):
-    os.mkdir(model_path)
+    os.makedirs(model_path)
 result_basepath = os.path.join(
     config['log']['result_dir'], config['run_name'])
 if not os.path.isdir(result_basepath):
-    os.mkdir(result_basepath)
+    os.makedirs(result_basepath)
 
 # Record experiment in Comet.ml
 if args.comet_implement:
@@ -122,6 +122,8 @@ print("With {} lesion patches and {} normal pancreas patches".format(
 logging.info("With {} lesion patches and {} normal pancreas patches".format(
     np.sum(valid_y), valid_X.shape[0] - np.sum(valid_y)))
 
+print(np.shape(train_X))
+print(np.shape(valid_X))
 # Data Generators - Keras
 datagen = ImageDataGenerator(
     horizontal_flip=True,
@@ -209,6 +211,7 @@ info = {}
 info['partition'] = [ntuh_partition, tcia_partition, msd_partition]
 info['patch_threshold'] = float(patch_threshold)
 info['patient_threshold'] = float(patient_threshold)
+info['dataset_information'] = config['dataset']
 with open(os.path.join(config['log']['checkpoint_dir'], (config['run_name'] + '_info.json')), 'w') as f:
     json.dump(info, f)
 
@@ -218,3 +221,5 @@ plt.savefig(os.path.join(result_basepath, 'acc_plot.png'))
 
 fig_los = show_train_history(history, 'loss', 'val_loss')
 plt.savefig(os.path.join(result_basepath, 'loss_plot.png'))
+
+print("finish!")

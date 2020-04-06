@@ -1,5 +1,6 @@
 import glob
 import os
+import copy
 
 import pickle
 import numpy as np
@@ -32,9 +33,9 @@ class DataGenerator():
         self.stride = stride
         self.data_type = data_type
         if data_type == 'tcia':
-            self.data_path = '/data/pancreas/Pancreas-CT/'
+            self.data_path = '/data2/open_dataset/pancreas/Pancreas-CT/'
         elif data_type == 'msd':
-            self.data_path = '/data/pancreas/MSD/Task07_Pancreas/'
+            self.data_path = '/data2/open_dataset/MSD/Task07_Pancreas/'
         elif data_type == 'ntuh':
             self.data_path = '/data2/pancreas/Nifti_data/'
 
@@ -70,9 +71,9 @@ class DataGenerator():
             labelpath = os.path.join(
                 self.data_path, 'label', 'LB_' + filename + '.nii.gz')
             backup_path = '/data2/pancreas/results/image_AD/'
+            filename_s = ''.join([char for char in filename][:2]) + str(int(''.join([char for char in filename][2:])))
             rothpath = os.path.join(backup_path, 'IM_'
-                                    + filename + '/IM_' + filename + '_model.nii.gz')
-
+                                    + filename_s + '/IM_' + filename_s + '_model.nii.gz')
             img = nib.load(imagepath)
             image_array = img.get_data()
             if os.path.exists(labelpath):
@@ -80,9 +81,15 @@ class DataGenerator():
             elif os.path.exists(rothpath):
                 result = nib.load(rothpath).get_data()
                 label = np.zeros(result.shape)
-                label[np.where(result == 8)] = 1
+                label[np.where(result==8)] = 1
             else:
-                print("can't find label file!{}".format(rothpath))
+                print(labelpath)
+                label = []
+                # filename = ''.join([char for char in filename][:2]) + str(int(''.join([char for char in filename][2:])))
+                # print(filename)
+                # labelpath = os.path.join(
+                # '/data2/pancreas/results/tmp/LB_' + filename + '.nii.gz')
+                # label = nib.load(labelpath).get_data()
             self.thickness = img.affine[2, 2]
 
         return image_array, label
@@ -90,13 +97,13 @@ class DataGenerator():
     def load_box(self, filename):
         self.filename = filename
         if self.data_type == 'tcia':
-            file_dir = '/data2/pancreas/box_data/tinghui/Pancreas-CT'
+            file_dir = '/data2/pancreas/box_data/wanyun/tcia'
             file_path = os.path.join(file_dir, filename)
         elif self.data_type == 'msd':
-            file_dir = '/data2/pancreas/box_data/tinghui/MSD'
+            file_dir = '/data2/pancreas/box_data/tinghui/msd'
             file_path = os.path.join(file_dir, filename)
         elif self.data_type == 'ntuh':
-            file_dir = '/data2/pancreas/box_data/tinghui/NTUH'
+            file_dir = '/data2/pancreas/box_data/tinghui/ntuh'
             file_path = os.path.join(file_dir, filename)
         image = np.load(os.path.join(file_path, 'ctscan.npy'))
         pancreas = np.load(os.path.join(file_path, 'pancreas.npy'))
@@ -253,147 +260,43 @@ def get_patches(config, case_partition, mode='train'):
 
     return X, y, idx
 
+def get_patches_test(config, case_partition, test_split=[20,20,0,0]):
+    X = []
+    y = []
+    idx = []
+    mode='test'
+    patch_size = config['dataset']['input_dim'][0]
+    stride = config['dataset']['stride']
+    load_way = config['dataset']['load']
+    # list_partition = case_partition[0]['test_H'][:test_split[0]] + case_partition[0]['test_C'][:test_split[1]] \
+    #     + case_partition[1]['test'][:test_split[2]] + case_partition[2]['test'][:test_split[3]] 
 
-# class DataGenerator_NTUH():
-#     def __init__(self, data_path, patch_size, stride=5):
-#         self.data_path = data_path
-#         self.patch_size = patch_size
-#         self.stride = stride
+    Case_partition = copy.deepcopy(case_partition)
+    Case_partition[0]['test'] = case_partition[0]['test'][:test_split[0]+test_split[1]]
+    Case_partition[1]['test'] = case_partition[1]['test'][:test_split[2]]
+    Case_partition[2]['test'] = case_partition[2]['test'][:test_split[3]] 
 
-#     def load_image(self, case_id, backup_path=''):
-#         imagepath = os.path.join(
-#             self.data_path, 'image', 'IM_' + case_id + '.nii.gz')
-#         labelpath = os.path.join(
-#             self.data_path, 'label', 'LB_' + case_id + '.nii.gz')
-#         # labelpath = os.path.join('/data2/pancreas/results/unetVae/NTUH',
-#         #                          'IM_' + case_id, 'IM_' + case_id + '_model.nii.gz')
-#         rothpath = os.path.join(backup_path, 'IM_'
-#                                 + case_id + '/IM_' + case_id + '_model.nii.gz')
+    for partition in Case_partition:
+        print("GET_PATCHES:\tLoading {} data ... ".format(partition['type']))
+        datagen = DataGenerator(
+            patch_size, stride=stride, data_type=partition['type'])
+        for case_id in tqdm(partition['test']):
+            image, pancreas, lesion = datagen.load_box(case_id)
+            tmp_X, tmp_y = datagen.generate_patch(
+                image, pancreas, lesion)
+            X = X + tmp_X
+            y = y + tmp_y
+            idx.append([partition['type'], case_id, len(tmp_y)])
+    
+    # for case_id in list_partition:
+    #     image, pancreas, lesion = datagen.load_box(case_id)
+    #     tmp_X, tmp_y = datagen.generate_patch(
+    #         image, pancreas, lesion)
+    #     X = X + tmp_X
+    #     y = y + tmp_y
+    #     idx.append([partition['type'], case_id, len(tmp_y)])
 
-#         image_array = nib.load(imagepath).get_data()
-#         if os.path.exists(labelpath):
-#             label = nib.load(labelpath).get_data()
-#         elif os.path.exists(rothpath):
-#             result = nib.load(rothpath).get_data()
-#             label = np.zeros(result.shape)
-#             label[np.where(result == 8)] = 1
-#         else:
-#             print("can't find label file!")
-#         self.affine = nib.load(imagepath).affine
-#         self.thickness = self.affine[2, 2]
-
-#         return image_array, label
-
-#     def load_boxdata(self, case_id):
-#         imagepath = os.path.join(self.data_path, case_id, 'ctscan.npy')
-#         pancreaspath = os.path.join(self.data_path, case_id, 'pancreas.npy')
-#         lesionpath = os.path.join(self.data_path, case_id, 'lesion.npy')
-#         image = np.load(imagepath)
-#         pancreas = np.load(pancreaspath)
-#         lesion = np.load(lesionpath)
-
-#         return image, pancreas, lesion
-
-#     def get_boxdata(self, image, label, border=(20, 20, 3)):
-
-#         pancreas = np.zeros(label.shape)
-#         pancreas[np.where(label != 0)] = 1
-#         lesion = np.zeros(label.shape)
-#         lesion[np.where(label == 2)] = 1
-
-#         if self.thickness < 5:
-#             image = finecut_to_thickcut(image, self.thickness)
-#             pancreas = finecut_to_thickcut(
-#                 pancreas, self.thickness, label_mode=True)
-#             lesion = finecut_to_thickcut(
-#                 lesion, self.thickness, label_mode=True)
-
-#         xmin, ymin, zmin = np.max(
-#             [np.min(np.where(pancreas != 0), 1) - border, (0, 0, 0)], 0)
-#         xmax, ymax, zmax = np.min(
-#             [np.max(np.where(pancreas != 0), 1) + border, label.shape], 0)
-
-#         box_image = image[xmin:xmax, ymin:ymax, zmin:zmax]
-#         box_pancreas = pancreas[xmin:xmax, ymin:ymax, zmin:zmax]
-#         box_lesion = lesion[xmin:xmax, ymin:ymax, zmin:zmax]
-
-#         return box_image, box_pancreas, box_lesion
-
-#     def preprocessing(self, image, pancreas, lesion):
-#         from skimage import morphology
-
-#         image = image[::-1, ::-1, :]
-#         pancreas = pancreas[::-1, ::-1, :]
-#         lesion = lesion[::-1, ::-1, :]
-
-#         pancreas = morphology.dilation(pancreas, np.ones([3, 3, 1]))
-#         lesion = morphology.dilation(lesion, np.ones([3, 3, 1]))
-
-#         image = windowing(image)
-#         image = minmax_normalization(image)
-
-#         return image, pancreas, lesion
-
-#     def generate_patch(self, image, pancreas, lesion):
-#         X = []
-#         Y = []
-
-#         self.coords = masked_2D_sampler(lesion, pancreas,
-#                                         self.patch_size, self.stride, threshold=1 / (self.patch_size ** 2))
-
-#         image[np.where(pancreas == 0)] = 0
-
-#         for coord in self.coords:
-#             mask_pancreas = image[coord[1]
-#                                   :coord[4], coord[2]:coord[5], coord[3]]
-#             X.append(mask_pancreas)
-#             Y.append(coord[0])
-
-#         self.X = X
-#         self.Y = Y
-
-#         return X, Y
-
-#     def patch_len(self):
-#         return len(self.X)
-
-#     def gt_pancreas_num(self):
-#         return len(self.Y) - np.sum(self.Y)
-
-#     def gt_lesion_num(self):
-#         return np.sum(self.Y)
-
-#     def get_prediction(self, model, patch_threshold=0.5):
-#         from sklearn.metrics import confusion_matrix
-#         test_X = np.array(self.X)
-#         test_X = test_X.reshape(
-#             (test_X.shape[0], test_X.shape[1], test_X.shape[2], 1))
-#         test_Y = np.array(self.Y)
-
-#         self.probs = model.predict_proba(test_X)
-#         predict_y = predict_binary(self.probs, patch_threshold)
-#         self.patch_matrix = confusion_matrix(test_Y, predict_y, labels=[1, 0])
-
-#         return self.patch_matrix
-
-#     def get_auc(self):
-#         from sklearn.metrics import roc_curve, auc
-#         fpr, tpr, thresholds = roc_curve(self.Y, self.probs)
-#         return auc(fpr, tpr)
-
-#     def get_roc_curve(self):
-#         from data_description.visualization import plot_roc
-#         plot_roc(self.probs, self.Y)
-
-#     def get_probs(self):
-#         return self.probs, self.Y
-
-#     def get_all_value(self):
-#         tp = self.patch_matrix[0][0]
-#         fn = self.patch_matrix[0][1]
-#         fp = self.patch_matrix[1][0]
-#         tn = self.patch_matrix[1][1]
-#         return tp, fn, fp, tn
+    return X, y, idx
 
 
 def predict_binary(prob, threshold):
@@ -581,7 +484,7 @@ def get_patch_partition_labels(case_partition, pancreas_dir, lesion_dir):
 def load_patches(data_path, case_list, patch_size=50, stride=5):
     X_total = []
     y_total = []
-    for ID in tqdm.tqdm(case_list):
+    for ID in tqdm(case_list):
         X_tmp, y_tmp = patch_generator(
             data_path, ID, patch_size, stride=stride, threshold=0.0004, max_amount=1000)
         X_total.extend(X_tmp)
@@ -671,15 +574,19 @@ def generate_case_partition(config):
 
     healthy_list = list(df[(df['type'] == 'healthy')
                            & (df['diff_patient_list'])]['case_id'])
+    
+    #healthy_list = [name for name in healthy_list if  os.path.isdir('/data2/pancreas/box_data/tinghui/NTUH/' + name )]
 
     tumor_list = list(df[(df['type'] == 'tumor')
                          & (df['diff_patient_list'])]['case_id'])
 
+    #tumor_list = [name for name in tumor_list if  os.path.isdir('/data2/pancreas/box_data/tinghui/NTUH/' + name )]
+
     healthy_partition = split_case_partition(
-        healthy_list, value=config['dataset']['NTUH_split'], random_seed=config['dataset']['seed'])
+        healthy_list, value=config['dataset']['NTUH_split_H'], random_seed=config['dataset']['seed'])
 
     tumor_partition = split_case_partition(
-        tumor_list, value=config['dataset']['NTUH_split'], random_seed=config['dataset']['seed'])
+        tumor_list, value=config['dataset']['NTUH_split_C'], random_seed=config['dataset']['seed'])
 
     ntuh_partition = {}
     ntuh_partition['type'] = 'ntuh'
@@ -689,9 +596,11 @@ def generate_case_partition(config):
     ntuh_partition['train'] = healthy_partition['train'] + \
         tumor_partition['train']
     ntuh_partition['test'] = healthy_partition['test'] + tumor_partition['test']
+    ntuh_partition['test_H'] = healthy_partition['test']
+    ntuh_partition['test_C'] = tumor_partition['test']
 
-    data_path_pancreasct = '/data/pancreas/Pancreas-CT/'
-    data_path_msd = '/data/pancreas/MSD/Task07_Pancreas/'
+    data_path_pancreasct = '/data2/pancreas/box_data/tinghui/Pancreas-CT/'
+    data_path_msd = '/data2/pancreas/box_data/tinghui/MSD/'
 
     tcia_list = os.listdir(data_path_pancreasct)
     for filename in tcia_list:
@@ -702,7 +611,8 @@ def generate_case_partition(config):
     tcia_partition['type'] = 'tcia'
     tcia_partition['all'] = tcia_list
 
-    msd_list = os.listdir(os.path.join(data_path_msd, 'imagesTr'))
+    #msd_list = os.listdir(os.path.join(data_path_msd, 'imagesTr'))
+    msd_list = os.listdir(data_path_msd)
     for filename in msd_list:
         if not filename[0] == 'p':
             msd_list.remove(filename)
@@ -711,4 +621,53 @@ def generate_case_partition(config):
     msd_partition['type'] = 'msd'
     msd_partition['all'] = msd_list
 
+    print("\nHealthy NTUH : ", len(healthy_list), "\nTumor NTUH : ", len(tumor_list), "\nHealthy ext : ", len(tcia_list), "\nTumor ext : ", len(msd_list), "\n")
     return ntuh_partition, tcia_partition, msd_partition
+
+def get_patches_list(config, case_partition, mode='train'):
+    X = []
+    y = []
+    idx = []
+    patch_size = config['dataset']['input_dim'][0]
+    stride = config['dataset']['stride']
+
+    for partition in case_partition:
+        print("GET_PATCHES:\tLoading {} data ... ".format(partition['type']))
+        datagen = DataGenerator(
+            patch_size, stride=stride, data_type=partition['type'])
+
+        for case_id in tqdm(partition[mode]):
+            image, pancreas, lesion = datagen.load_box(case_id)
+            tmp_X, tmp_y = datagen.generate_patch(image, pancreas, lesion)
+            X = X + tmp_X
+            y = y + tmp_y
+            idx.append([partition['type'], case_id, len(tmp_y)])
+
+    return X, y, idx
+
+def save_boxdata(config, case_partition, mode='train'):
+    patch_size = config['dataset']['input_dim'][0]
+    stride = config['dataset']['stride']
+
+    for partition in case_partition:
+        print("GET_PATCHES:\tLoading {} data ... ".format(partition['type']))
+
+        file_path = '/data2/pancreas/box_data/wanyun/' + partition['type'] + '/'
+        datagen = DataGenerator(
+            patch_size, stride=stride, data_type=partition['type'])
+        for case_id in tqdm(partition[mode]):
+            img, lbl = datagen.load_image(case_id)
+            if len(lbl)>0 and not os.path.exists(file_path + case_id):
+                box_img, box_pan, box_les = datagen.get_boxdata(
+                    img, lbl)
+                image, pancreas, lesion = datagen.preprocessing(
+                    box_img, box_pan, box_les)
+
+                os.mkdir(file_path + case_id)
+                np.save(os.path.join(file_path + case_id, 'ctscan.npy'), image)
+                np.save(os.path.join(file_path + case_id, 'pancreas.npy'), pancreas)
+                np.save(os.path.join(file_path + case_id, 'lesion.npy'), lesion)
+            
+
+
+                

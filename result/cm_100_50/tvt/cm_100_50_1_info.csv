@@ -1,0 +1,4 @@
+,title,ntuh_health,ntuh_cancer,ext_health,ext_cancer
+0,train,288.0,288.0,30,101
+1,validation,32.0,32.0,3,11
+2,test,80.0,80.0,16,56

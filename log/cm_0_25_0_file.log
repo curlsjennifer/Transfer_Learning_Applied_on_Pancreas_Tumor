@@ -1,0 +1,31 @@
+INFO    : 2020-03-14 13:56:27: Finish data partition
+INFO    : 2020-03-14 13:56:29: Finish loading 10533 patches from 64 studies
+INFO    : 2020-03-14 13:56:29: With 1320 lesion patches and 9213 normal pancreas patches
+INFO    : 2020-03-14 13:56:29: Finish loading 1207 patches from 8 studies
+INFO    : 2020-03-14 13:56:29: With 170 lesion patches and 1037 normal pancreas patches
+WARNING : 2020-03-14 13:56:29: From /opt/python-3.6-packages/keras/2.2.4/keras/backend/tensorflow_backend.py:74: The name tf.get_default_graph is deprecated. Please use tf.compat.v1.get_default_graph instead.
+
+WARNING : 2020-03-14 13:56:29: From /opt/python-3.6-packages/keras/2.2.4/keras/backend/tensorflow_backend.py:517: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+WARNING : 2020-03-14 13:56:29: From /opt/python-3.6-packages/keras/2.2.4/keras/backend/tensorflow_backend.py:4138: The name tf.random_uniform is deprecated. Please use tf.random.uniform instead.
+
+WARNING : 2020-03-14 13:56:29: From /opt/python-3.6-packages/keras/2.2.4/keras/backend/tensorflow_backend.py:3976: The name tf.nn.max_pool is deprecated. Please use tf.nn.max_pool2d instead.
+
+WARNING : 2020-03-14 13:56:30: From /opt/python-3.6-packages/keras/2.2.4/keras/backend/tensorflow_backend.py:133: The name tf.placeholder_with_default is deprecated. Please use tf.compat.v1.placeholder_with_default instead.
+
+WARNING : 2020-03-14 13:56:30: From /opt/python-3.6-packages/keras/2.2.4/keras/backend/tensorflow_backend.py:3445: calling dropout (from tensorflow.python.ops.nn_ops) with keep_prob is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use `rate` instead of `keep_prob`. Rate should be set to `rate = 1 - keep_prob`.
+WARNING : 2020-03-14 13:56:30: From /opt/python-3.6-packages/keras/2.2.4/keras/optimizers.py:790: The name tf.train.Optimizer is deprecated. Please use tf.compat.v1.train.Optimizer instead.
+
+WARNING : 2020-03-14 13:56:30: From /opt/python-3.6-packages/keras/2.2.4/keras/backend/tensorflow_backend.py:3376: The name tf.log is deprecated. Please use tf.math.log instead.
+
+WARNING : 2020-03-14 13:56:30: From /opt/python-3.6-packages/tensorflow-gpu/1.14.0/tensorflow/python/ops/nn_impl.py:180: add_dispatch_support.<locals>.wrapper (from tensorflow.python.ops.array_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use tf.where in 2.0, which has the same broadcast rule as np.where
+INFO    : 2020-03-14 13:56:30: Setting class weights [0.5716379  3.98977273]
+INFO    : 2020-03-14 13:56:30: Start training
+INFO    : 2020-03-14 14:04:45: Finish training
+INFO    : 2020-03-14 14:04:45: Finish savining model
+INFO    : 2020-03-14 14:04:46: Patch threshold: 0.19881829619407654
+INFO    : 2020-03-14 14:04:48: Patient threshold: 0.375
