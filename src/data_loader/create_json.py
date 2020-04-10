@@ -20,15 +20,14 @@ from data_loader.patch_sampler import patch_generator
 from data_loader.patch_sampler import masked_2D_sampler
 from data_loader.preprocessing import (
     minmax_normalization, windowing, smoothing)
-from data_loader.create_boxdata import finecut_to_thickcut
 from utils import load_config, flatten_config_for_logging, find_threshold, predict_binary
 
 
 def create_json_cross(config, exp_name, fold=5, rate=1, copy=None):
 
 
-    # data_path_pancreasct = '/data2/pancreas/box_data/tinghui/Pancreas-CT/'
-    # data_path_msd = '/data2/pancreas/box_data/tinghui/MSD/'
+    data_path_pancreasct = '/data2/pancreas/box_data/tinghui/Pancreas-CT/'
+    data_path_msd = '/data2/pancreas/box_data/tinghui/MSD/'
     
     exp_path = os.path.join(config['log']['result_dir'], exp_name, 'jsons')
     tvt_path = os.path.join(config['log']['result_dir'], exp_name, 'tvt')
@@ -87,6 +86,8 @@ def create_json_cross(config, exp_name, fold=5, rate=1, copy=None):
         # ec_list = [file for file in ec_list if file[0] == 'p']
 
         [nh_list, nc_list, eh_list, ec_list] = np.load('/data2/pancreas/box_data/wanyun/patient_list.npy', allow_pickle=True)
+        print(nh_list)
+        print(nc_list)
 
         test_num_h = int(np.around(len(nh_list)/fold))
         test_num_c = int(np.around(len(nc_list)/fold))

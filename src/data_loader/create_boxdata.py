@@ -95,7 +95,6 @@ def create_boxdata(tumorpath, sortkey,
 
     dcmpathes, img_origin, thickness, img_spacing = get_dicominfo(
         tumorpath, sortkey)
-    print(thickness, img_spacing)
 
     # Read label nrrd
     tumor_label, tumor_options = nrrd.read(tumorpath + 'label.nrrd')
@@ -109,7 +108,6 @@ def create_boxdata(tumorpath, sortkey,
     else:
         seg_spacing = np.diag(np.array(tumor_options['space directions'])
                               .astype(float))
-    print(seg_origin)
 
     # Calculate segmetation origin index in image voxel coordinate
     seg_origin_idx = np.round((seg_origin / seg_spacing

@@ -100,10 +100,10 @@ class DataGenerator():
             file_dir = '/data2/pancreas/box_data/wanyun/tcia'
             file_path = os.path.join(file_dir, filename)
         elif self.data_type == 'msd':
-            file_dir = '/data2/pancreas/box_data/tinghui/msd'
+            file_dir = '/data2/pancreas/box_data/wanyun/msd'
             file_path = os.path.join(file_dir, filename)
         elif self.data_type == 'ntuh':
-            file_dir = '/data2/pancreas/box_data/tinghui/ntuh'
+            file_dir = '/data2/pancreas/box_data/wanyun/ntuh'
             file_path = os.path.join(file_dir, filename)
         image = np.load(os.path.join(file_path, 'ctscan.npy'))
         pancreas = np.load(os.path.join(file_path, 'pancreas.npy'))
@@ -648,16 +648,19 @@ def get_patches_list(config, case_partition, mode='train'):
 def save_boxdata(config, case_partition, mode='train'):
     patch_size = config['dataset']['input_dim'][0]
     stride = config['dataset']['stride']
+    save_list = [[], [], []]
+    i = 0
 
     for partition in case_partition:
         print("GET_PATCHES:\tLoading {} data ... ".format(partition['type']))
-
         file_path = '/data2/pancreas/box_data/wanyun/' + partition['type'] + '/'
+        save_list_av = []
         datagen = DataGenerator(
             patch_size, stride=stride, data_type=partition['type'])
         for case_id in tqdm(partition[mode]):
             img, lbl = datagen.load_image(case_id)
             if len(lbl)>0 and not os.path.exists(file_path + case_id):
+                save_list_av.append(case_id)
                 box_img, box_pan, box_les = datagen.get_boxdata(
                     img, lbl)
                 image, pancreas, lesion = datagen.preprocessing(
@@ -667,6 +670,13 @@ def save_boxdata(config, case_partition, mode='train'):
                 np.save(os.path.join(file_path + case_id, 'ctscan.npy'), image)
                 np.save(os.path.join(file_path + case_id, 'pancreas.npy'), pancreas)
                 np.save(os.path.join(file_path + case_id, 'lesion.npy'), lesion)
+
+        save_list[i] = save_list_av
+        print(len(save_list_av))
+        i += 1
+    return save_list
+    
+
             
 
 
