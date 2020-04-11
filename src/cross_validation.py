@@ -2,7 +2,8 @@
 filename : cross_validtion
 author : WanYun, Yang
 date : 2020/04/10
-description : use cross validation tool to analysis models
+description : 
+    use cross validation tool to analysis models.
 """
 
 import os
@@ -22,7 +23,7 @@ dev = "'0'"
 
 # Configs and related parameters
 config = load_config(config_name)
-create_json_cross(config, exp_name, fold=fold, rate=1)
+create_json_cross(config, exp_name, fold=fold, rate=1, copy='ct_0_25_10')
 exp_path = os.path.join(config['log']['result_dir'], exp_name, 'jsons')
 model_path = config['log']['model_dir']
 cross_exp_name = [name.split('.')[0] for name in os.listdir(exp_path)]
@@ -47,7 +48,7 @@ for json_name in cross_exp_name:
             "-r '" + json_name + "_trans' "
             "-j '" + exp_path + "/" + exp_name + "' "
             "-d " + dev + " "
-            "-m '" + os.path.join(model_path, name, 'weights.h5')
+            "-m '" + os.path.join(model_path, json_name, 'weights.h5')
         )
     else:
         # mix-data model
@@ -68,6 +69,6 @@ os.system(
     )
 if exp_type == 'transfer':
     os.system("python test.py "
-    "-r '" + exp_name + "' 
+    "-r '" + exp_name + "' " 
     "-t 'trans'"
     )
