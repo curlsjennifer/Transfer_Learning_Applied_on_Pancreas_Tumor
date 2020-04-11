@@ -17,18 +17,19 @@ from pandas import DataFrame
 from shutil import copyfile, rmtree
 
 
-def create_json_cross(config, exp_name, fold=5, rate=1, copy=None):
+def create_json_cross(config, exp_name, fold=5, target_rate=1, copy=None):
     """
     Description:
-        use create .json files to create several lists for 
+        use create .json files to create several lists for
         train/validation/test sets.
 
     Args:
         config: config, including file paths.
         exp_name: experiment name.
         fold: number of folds for cross validation.
-        rate: rate to control the amount of target data. If rate = 1, use all
-        target data; if rate = 0, use 0 target data.
+        target_rate: rate to control the amount of target data.
+        If rate = 1, use all target data; if rate = 0,
+        use 0 target data.
         copy: copy .json files from other experiments
     """
 
@@ -61,8 +62,10 @@ def create_json_cross(config, exp_name, fold=5, rate=1, copy=None):
 
         test_num_h_e = int(np.around(len(eh_list) / fold))
         test_num_c_e = int(np.around(len(ec_list) / fold))
-        val_num_h_e = int(np.around((len(eh_list) - test_num_h_e) * 0.1 * rate))
-        val_num_c_e = int(np.around((len(ec_list) - test_num_c_e) * 0.1 * rate))
+        val_num_h_e = int(np.around(
+            0.1 * (len(eh_list) - test_num_h_e) * target_rate))
+        val_num_c_e = int(np.around(
+            0.1 * (len(ec_list) - test_num_c_e) * target_rate))
 
         # create .json files for each experiments
         for index in range(fold):
@@ -92,10 +95,10 @@ def create_json_cross(config, exp_name, fold=5, rate=1, copy=None):
 
             tv_h = [x for x in eh_list if x not in tcia_partition['test']]
             random.Random(config['dataset']['seed']).shuffle(tv_h)
-            tv_h = tv_h[:int(np.around(len(tv_h) * rate))]
+            tv_h = tv_h[:int(np.around(len(tv_h) * target_rate))]
             tv_c = [x for x in ec_list if x not in msd_partition['test']]
             random.Random(config['dataset']['seed']).shuffle(tv_c)
-            tv_c = tv_c[:int(np.around(len(tv_c) * rate))]
+            tv_c = tv_c[:int(np.around(len(tv_c) * target_rate))]
 
             tcia_partition['train'] = tv_h[val_num_h_e:]
             msd_partition['train'] = tv_c[val_num_c_e:]
