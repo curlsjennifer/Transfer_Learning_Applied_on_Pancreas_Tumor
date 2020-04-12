@@ -121,7 +121,7 @@ cbs = [
 class_weights = class_weight.compute_class_weight(
     'balanced', np.unique(train_y), train_y)
 print("Setting class weights {}".format(class_weights))
-print("BBBBB")
+
 history = model.fit_generator(
     datagen.flow(train_X, train_y, batch_size=config['train']['batch_size']),
     epochs=config['train']['epochs'],

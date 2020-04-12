@@ -10,3 +10,8 @@ __pycache__/
 # Just in case
 .h5
 .dcm
+
+# test
+**/log
+**/models
+**/result
