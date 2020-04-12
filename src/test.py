@@ -26,7 +26,7 @@ from sklearn.metrics import confusion_matrix, roc_curve, auc
 from sklearn import metrics
 
 from utils import load_config, find_threshold, predict_binary
-from data_loader.data_loader import (get_patches, get_patches_test)
+from data_loader.data_loader import get_patches
 from net_keras import *
 
 
