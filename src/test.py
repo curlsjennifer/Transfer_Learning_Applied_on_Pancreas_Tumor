@@ -167,7 +167,7 @@ for filename in os.listdir(exp_path + '/jsons/'):
     name = filename.split('.')[0]
     res_list = exp_res(exp_path + '/jsons/' + filename,
                        config, 'ntuh', args.trans)
-    Result_ntuh = pd.concat([Result_ntuh, res_list]) if index == 0 else res_list
+    Result_ntuh = pd.concat([Result_ntuh, res_list]) if index == 1 else res_list
     index = 1
 
 # Work on ext test set
@@ -179,7 +179,7 @@ for filename in os.listdir(exp_path + '/jsons/'):
         name = filename.split('.')[0]
     res_list = exp_res(exp_path + '/jsons/' + filename,
                        config, 'ext', args.trans)
-    Result_ext = pd.concat([Result_ext, res_list]) if index == 0 else res_list
+    Result_ext = pd.concat([Result_ext, res_list]) if index == 1 else res_list
 
     copyfile(os.path.join('../result', name, 'acc_plot.png'),
              exp_path + '/figures/acc_' + name + '.png')
