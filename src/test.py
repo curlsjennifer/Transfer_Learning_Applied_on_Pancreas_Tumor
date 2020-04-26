@@ -66,6 +66,10 @@ def exp_res(filename, config, type_ext, trans):
         model.load_weights(os.path.join(
             '../models', model_name + '_trans', 'weights.h5'))
         weights, biases = model.layers[0].get_weights()
+    elif trans == "trans2":
+        model.load_weights(os.path.join(
+            '../models', model_name + '_trans2', 'weights.h5'))
+        weights, biases = model.layers[0].get_weights()
     else:
         model.load_weights(os.path.join(
             '../models', model_name, 'weights.h5'))
@@ -103,6 +107,9 @@ def exp_res(filename, config, type_ext, trans):
     if trans == "trans":
         plt.savefig(os.path.join(exp_path + '/rocs/',
                                  fig_name + '_trans.png'))
+    elif trans == "trans2":
+        plt.savefig(os.path.join(exp_path + '/rocs/',
+                                 fig_name + '_trans2.png'))
     else:
         plt.savefig(os.path.join(exp_path + '/rocs/',
                                  fig_name + '.png'))
@@ -175,18 +182,20 @@ index = 0
 for filename in os.listdir(exp_path + '/jsons/'):
     if args.trans == "trans":
         name = filename.split('.')[0] + "_trans"
+    elif args.trans == "trans2":
+        name = filename.split('.')[0] + "_trans2"   
     else:
         name = filename.split('.')[0]
     res_list = exp_res(exp_path + '/jsons/' + filename,
                        config, 'ext', args.trans)
     Result_ext = pd.concat([Result_ext, res_list]) if index == 1 else res_list
 
-    copyfile(os.path.join('../result', name, 'acc_plot.png'),
-             exp_path + '/figures/acc_' + name + '.png')
-    copyfile(os.path.join('../result', name, 'loss_plot.png'),
-             exp_path + '/figures/loss_' + name + '.png')
-    copyfile(os.path.join('../models', name , 'weights.h5'),
-             exp_path + '/models/' + name + '.h5')
+    # copyfile(os.path.join('../result', name, 'acc_plot.png'),
+    #          exp_path + '/figures/acc_' + name + '.png')
+    # copyfile(os.path.join('../result', name, 'loss_plot.png'),
+    #          exp_path + '/figures/loss_' + name + '.png')
+    # copyfile(os.path.join('../models', name , 'weights.h5'),
+    #          exp_path + '/models/' + name + '.h5')
     index = 1
 
 # Save .csv files
@@ -195,6 +204,11 @@ if args.trans == "trans":
         os.path.join(exp_path, (args.exp_name + '_ntuh_trans.csv')))
     Result_ext.to_csv(
         os.path.join(exp_path, (args.exp_name + '_ext_trans.csv')))
+elif args.trans == "trans2":
+    Result_ntuh.to_csv(
+        os.path.join(exp_path, (args.exp_name + '_ntuh_trans2.csv')))
+    Result_ext.to_csv(
+        os.path.join(exp_path, (args.exp_name + '_ext_trans2.csv')))
 else:
     Result_ntuh.to_csv(
         os.path.join(exp_path, (args.exp_name + '_ntuh.csv')))

@@ -1,9 +1,9 @@
 """
-filename : mix.py
+filename : transfer_2.py
 author : WanYun, Yang (from TingHui, Wu)
 date : 2020/04/11
 description :
-    mix target and source data and train a model
+    apply fine-tuning method on model (source) by model (target)
 """
 
 import os
@@ -27,7 +27,6 @@ from data_description.visualization import show_train_history
 from net_keras import *
 
 # Parse Args
-plt.switch_backend('agg')
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config", default='./configs/base.yml',
                     type=str, help="train configuration")
@@ -35,10 +34,12 @@ parser.add_argument("-r", "--run_name", default=None, type=str,
                     help="run name for this experiment. (Default: time)")
 parser.add_argument("-j", "--json", default=None, type=str,
                     help="case json")
-parser.add_argument("-s", "--source_data", default=None, type=bool,
-                    help="source data")
+parser.add_argument("-l", "--fix_layer", default=None, type=int,
+                    help="parameter for cross validation")
+parser.add_argument("-m", "--origin_model", default=None, type=str,
+                    help="origin_model")  
 parser.add_argument("-d", "--dev", default=None, type=str,
-                    help="device")
+                    help="device")                 
 args = parser.parse_args()
 
 # Load config
@@ -47,11 +48,11 @@ config['system']['CUDA_VISIBLE_DEVICES'] = args.dev
 exp_name = args.run_name
 
 # Set path
-model_path = os.path.join(config['log']['model_dir'], exp_name)
+model_path = os.path.join(config['log']['model_dir'], exp_name + '2')
 if not os.path.isdir(model_path):
     os.makedirs(model_path)
 result_basepath = os.path.join(
-    config['log']['result_dir'], exp_name)
+    config['log']['result_dir'], exp_name + '2')
 if not os.path.isdir(result_basepath):
     os.makedirs(result_basepath)
 
@@ -65,9 +66,8 @@ set_session(tf.compat.v1.Session(config=sess_config))
 with open(args.json + '.json' , 'r') as reader:
     case = json.loads(reader.read())
     ntuh_partition, tcia_partition, msd_partition = case['partition']
-    if not args.source_data:
-        ntuh_partition['train'] = []
-        ntuh_partition['validation'] = []
+    ntuh_partition['train'] = []
+    ntuh_partition['validation'] = []
 
 # Get train patches
 train_X, train_y, train_idx = get_patches(
@@ -107,6 +107,21 @@ datagen.fit(train_X)
 
 # Model Init
 model = eval(config['model']['name'])(config['dataset']['input_dim'])
+model.load_weights(args.origin_model, by_name=True)
+
+
+# Set Trainable Layers
+fix_layer = args.fix_layer
+i = 0
+for layer in model.layers[:fix_layer]:
+    layer.trainable = False
+    print("False : ", i, layer.name)
+    i += 1
+for layer in model.layers[fix_layer:]:
+    layer.trainable = True
+    print("True : ", i, layer.name)
+    i += 1
+
 model.compile(
     loss=keras.losses.binary_crossentropy,
     optimizer=keras.optimizers.Adam(lr=config['optimizer']['lr'],
@@ -118,13 +133,30 @@ cbs = [
     keras.callbacks.EarlyStopping(monitor='val_loss', patience=40)
 ]
 
+# Check error data
+valid_probs = model.predict_proba(valid_X)
+patch_threshold = find_threshold(valid_probs, valid_y)
+train_probs = model.predict_proba(train_X)
+probs = predict_binary(train_probs, patch_threshold)
+error_index = [i for i in range(len(probs)) if abs(probs[i, 0] - train_y[i]) > 0]
+error_train_X = np.repeat(train_X[error_index, :, :, :], 1, axis=0)
+error_train_y = np.repeat(train_y[error_index], 1, axis=0)
+
 # Model Training
 class_weights = class_weight.compute_class_weight(
     'balanced', np.unique(train_y), train_y)
 print("Setting class weights {}".format(class_weights))
-
+print(class_weights)
 history = model.fit_generator(
     datagen.flow(train_X, train_y, batch_size=config['train']['batch_size']),
+    epochs=config['train']['epochs'],
+    callbacks=cbs,
+    steps_per_epoch=len(train_X) / config['train']['batch_size'],
+    class_weight=class_weights,
+    validation_data=(valid_X, valid_y))
+
+history = model.fit_generator(
+    datagen.flow(error_train_X, error_train_y, batch_size=config['train']['batch_size']),
     epochs=config['train']['epochs'],
     callbacks=cbs,
     steps_per_epoch=len(train_X) / config['train']['batch_size'],
