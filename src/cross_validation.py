@@ -62,16 +62,6 @@ for json_name in cross_exp_name:
             "-d " + dev + " "
             "-m '" + os.path.join('../models', json_name, 'weights.h5') + "'"
         )
-        # use target data to fine-tune source model (type 2)
-        os.system(
-            "python transfer_3.py "
-            "-c " + config_name + " "
-            "-r '" + json_name + "_trans' "
-            "-j '" + exp_path + "/" + json_name + "' "
-            "-l " + str(fix_layer) + " "
-            "-d " + dev + " "
-            "-m '" + os.path.join('../models', json_name, 'weights.h5') + "'"
-        )
     else:
         # mix-data model
         os.system(
