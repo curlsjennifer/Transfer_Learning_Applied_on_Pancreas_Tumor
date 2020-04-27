@@ -14,8 +14,8 @@ fold = 10
 
 # Modified variables
 exp_type = 'mix'
-target_rate = 1
-copy = 'ct_0_100_10'
+target_rate = 75
+copy = 'ct_0_75_10'
 fix_layer = 3
 source_data = True
 dev = "'0'"
@@ -44,24 +44,24 @@ cross_exp_name = [name.split('.')[0] for name in os.listdir(exp_path)]
 for json_name in cross_exp_name:
     print("Working on experiment : ", json_name)
     if exp_type == 'transfer':
-        # create a initial source model for transfer learning
-        os.system(
-            "python transfer_1.py "
-            "-c " + config_name + " "
-            "-r '" + json_name + "' "
-            "-j '" + exp_path + "/" + json_name + "' "
-            "-d " + dev
-        )
-        # use target data to fine-tune source model
-        os.system(
-            "python transfer_2.py "
-            "-c " + config_name + " "
-            "-r '" + json_name + "_trans' "
-            "-j '" + exp_path + "/" + json_name + "' "
-            "-l " + str(fix_layer) + " "
-            "-d " + dev + " "
-            "-m '" + os.path.join('../models', json_name, 'weights.h5') + "'"
-        )
+        # # create a initial source model for transfer learning
+        # os.system(
+        #     "python transfer_1.py "
+        #     "-c " + config_name + " "
+        #     "-r '" + json_name + "' "
+        #     "-j '" + exp_path + "/" + json_name + "' "
+        #     "-d " + dev
+        # )
+        # # use target data to fine-tune source model
+        # os.system(
+        #     "python transfer_2.py "
+        #     "-c " + config_name + " "
+        #     "-r '" + json_name + "_trans' "
+        #     "-j '" + exp_path + "/" + json_name + "' "
+        #     "-l " + str(fix_layer) + " "
+        #     "-d " + dev + " "
+        #     "-m '" + os.path.join('../models', json_name, 'weights.h5') + "'"
+        # )
         # use target data to fine-tune source model (type 2)
         os.system(
             "python transfer_3.py "

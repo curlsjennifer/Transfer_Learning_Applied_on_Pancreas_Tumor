@@ -147,13 +147,6 @@ class_weights = class_weight.compute_class_weight(
     'balanced', np.unique(train_y), train_y)
 print("Setting class weights {}".format(class_weights))
 print(class_weights)
-history = model.fit_generator(
-    datagen.flow(train_X, train_y, batch_size=config['train']['batch_size']),
-    epochs=config['train']['epochs'],
-    callbacks=cbs,
-    steps_per_epoch=len(train_X) / config['train']['batch_size'],
-    class_weight=class_weights,
-    validation_data=(valid_X, valid_y))
 
 history = model.fit_generator(
     datagen.flow(error_train_X, error_train_y, batch_size=config['train']['batch_size']),
@@ -162,6 +155,15 @@ history = model.fit_generator(
     steps_per_epoch=len(train_X) / config['train']['batch_size'],
     class_weight=class_weights,
     validation_data=(valid_X, valid_y))
+
+history = model.fit_generator(
+    datagen.flow(train_X, train_y, batch_size=config['train']['batch_size']),
+    epochs=config['train']['epochs'],
+    callbacks=cbs,
+    steps_per_epoch=len(train_X) / config['train']['batch_size'],
+    class_weight=class_weights,
+    validation_data=(valid_X, valid_y))
+
 
 model.save_weights(os.path.join(model_path, 'weights.h5'))
 
