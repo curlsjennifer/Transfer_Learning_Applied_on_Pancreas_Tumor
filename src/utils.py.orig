@@ -1,9 +1,8 @@
 import collections
 import hashlib
-from ruamel.yaml import YAML
+import ruamel.yaml
 from keras import backend as K
 import numpy as np
-yaml = YAML(typ='safe')
 
 
 def get_config_sha1(config, digit=5):
@@ -83,7 +82,7 @@ def load_config(path):
     """
 
     with open(path, 'r', encoding='utf-8') as f:
-        config = yaml.load(f)
+        config = ruamel.yaml.safe_load(f)
     config['config_sha1'] = get_config_sha1(config, 5)
 
     return config
