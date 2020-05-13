@@ -141,9 +141,9 @@ item_num = 20
 tar_X = np.zeros((0, 50, 50, 1))
 tar_y = []
 tar_idx = []
+steps_per_epoch = int(np.shape(ext_X)[0] / config['train']['batch_size'])
 
-for e in range(200):
-    print('Epoch', e)
+while np.shape(ext_X)[0] > 0:
     o_ext_X = copy.copy(ext_X)
     o_ext_y = copy.copy(ext_y)
     o_ext_idx = copy.copy(ext_idx)
@@ -175,17 +175,37 @@ for e in range(200):
             ext_y.extend(o_ext_y[start:end])
             ext_idx.append(o_ext_idx[ind])
     
-    print("NOTE", np.shape(do_X)[0], np.shape(ext_X)[0], np.shape(tar_X)[0], np.shape(o_ext_X)[0])
-    model.fit(do_X, np.array(do_y), 
-                epochs=10, 
-                callbacks=cbs, 
-                validation_data=(valid_X, valid_y),
-                steps_per_epoch=steps_per_epoch, 
-                validation_steps=int(len(valid_X) / config['train']['batch_size']),
-                class_weight=class_weights)
-    
     tar_X = np.concatenate((tar_X, do_X), axis=0)
     tar_y = np.concatenate((tar_y, do_y), axis=0)
     tar_idx.extend(do_idx)    
+    
+    print("Num of do : ", np.shape(do_idx)[0],
+          "Num of ext : ", np.shape(ext_idx)[0], 
+          "Num of tar : ", np.shape(tar_idx)[0], 
+          "Num of prev ext : ", np.shape(o_ext_idx)[0])
+    
+    datagen = ImageDataGenerator(
+    horizontal_flip=True,
+    fill_mode='constant',
+    cval=0.0,
+    vertical_flip=True)
+    datagen.fit(tar_X)
+    
+    history = model.fit_generator(
+        datagen.flow(tar_X, np.array(tar_y), batch_size=config['train']['batch_size']),
+        epochs=config['train']['epochs']/10,
+        callbacks=cbs,
+        steps_per_epoch=steps_per_epoch,
+        class_weight=class_weights,
+        validation_data=(valid_X, valid_y))
+    
+    # model.fit(tar_X, np.array(tar_y), 
+    #             epochs=10, 
+    #             callbacks=cbs, 
+    #             validation_data=(valid_X, valid_y),
+    #             steps_per_epoch=steps_per_epoch, 
+    #             validation_steps=int(len(valid_X) / config['train']['batch_size']),
+    #             class_weight=class_weights)
+    
 
 model.save_weights(os.path.join(model_path, 'weights.h5'))
