@@ -9,98 +9,33 @@ description :
 import os
 
 # Fixed variables
-exp_type = 'transfer'
-target_rate = 1
-copy = 'ct_0_100_10'
 config_name = './configs/basic.yml'
-dev = "'1'"
+dev = "'0'"
 fold = 10
 
 # Modified variables
 fix_layer = 3 # transfer
-source_data = True # mix
+exp_name = 'inc_test'
+num_tar = 300
 
-
-# Name the experiment
-def exp_name(type):
-    return {
-        'transfer':'_'.join(['ct', str(fix_layer),
-                             str(int(target_rate*100)), str(fold)]),
-        'mix': '_'.join(['cm', str(int(source_data)*100),
-                         str(int(target_rate*100)), str(fold)]),
-        'increment':'_'.join(['ci', str(fix_layer),
-                             str(int(target_rate*100)), str(fold)]) 
-    }[x]
-    
-if exp_type == 'transfer':
-    exp_name = '_'.join(['ct', str(fix_layer), 
-                         str(int(target_rate*100)), str(fold)])
-else:
-    exp_name = '_'.join(['cm', str(int(source_data)*100), 
-                         str(int(target_rate*100)), str(fold)])
-    
-# Source environment
-# ENV =  "source /home/u/curlsjennifer/source-python.bashrc"
-# os.system("source /home/u/curlsjennifer/source-python.bashrc")
-#CMD = "bash -c '" + ENV + "; " + CREATE_JSON + "'"
-
-# Configs and related parameters
-os.system(
-    "python create_json.py " + \
-    "-c " + config_name + " " + \
-    "-e '" + exp_name + "' " + \
-    "-f " + str(fold) + " " + \
-    "-r " + str(target_rate) + " " + \
-    "-copy '" + copy + "' "
-)
+# Create folders
+model_path = os.path.join('../results', exp_name, 'models')
+if not os.path.isdir(model_path):
+    os.makedirs(model_path)
+    os.makedirs(model_path.replace('models', 'acc'))
+    os.makedirs(model_path.replace('models', 'loss'))
+    os.makedirs(model_path.replace('models', 'source_rocs'))
+    os.makedirs(model_path.replace('models', 'target_rocs'))
 
 # Transfer learning or mix data for each small model
-exp_path = os.path.join("../result/", exp_name, 'jsons')
-cross_exp_name = [name.split('.')[0] for name in os.listdir(exp_path)]
+cross_exp_name = ['_'.join([exp_name, str(ind), str(num_tar)])
+                   for ind in range(2)]
 
-check = 0
-for json_name in cross_exp_name:
-    print("Working on experiment : ", json_name)
-    if exp_type == 'transfer' and check == 0:
-        check = 1
-        # create a initial source model for transfer learning
-        # os.system(
-        #     "python transfer_1.py "
-        #     "-c " + config_name + " "
-        #     "-r '" + json_name + "' "
-        #     "-j '" + exp_path + "/" + json_name + "' "
-        #     "-d " + dev
-        # )
-        
-        # use target data to fine-tune source model
-        os.system(
-            "python increment.py "
-            "-c " + config_name + " "
-            "-r '" + json_name + "_trans' "
-            "-j '" + exp_path + "/" + json_name + "' "
-            "-l " + str(fix_layer) + " "
-            "-d " + dev + " "
-            "-m '" + os.path.join('../models', json_name, 'weights.h5') + "'"
-        )
-    else:
-        check = 1
-        # mix-data model
-        # os.system(
-        #     "python mix.py "
-        #     "-c " + config_name + " "
-        #     "-r '" + json_name + "' "
-        #     "-s '" + str(source_data) + "' "
-        #     "-j '" + exp_path + "/" + json_name + "' "
-        #     "-d " + dev
-        # )
-
-# Calculate auc for all experiments
-# os.system(
-#     "python test.py "
-#     "-e '" + exp_name + "' "
-#     "-t 'none'")
-# if exp_type == 'transfer':
-#     os.system(
-#         "python test.py "
-#         "-e '" + exp_name + "' "
-#         "-t 'trans2'")
+for data_name in cross_exp_name:
+    print("Working on experiment : ", data_name)
+    # create a initial source model for transfer learning
+    os.system(
+        "python increment.py "
+        "-r '" + data_name + "' "
+        "-d " + dev
+    )

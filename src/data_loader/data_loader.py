@@ -286,8 +286,41 @@ def save_boxdata(config, case_partition, mode='train'):
         index += 1
     return save_list
     
-
+class dataset:
+    def __init__(self, info, mode):
+        onfig = load_config('./configs/basic.yml')
+        X, y, idx = get_patches(config, info, mode=mode)
+        X = np.array(X)
+        X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
+        y = np.array(y)
+        self.X=X
+        self.y=y
+        self.idx=idx
+        self.mode=mode
+        
+class exp_path:
+    def __init__(self, run_name, inc=False):
+        self.run_name = run_name
+        self.exp_name = '_'.join(run_name.split('_')[:-2])
+        if inc:
+            self.exp_name = '_'.join(run_name.split('_')[:-1])
+        self.dataset_index = '_'.join(run_name.split('_')[-2:])
+        
+        self.source_path = ''.join(['/data2/pancreas/box_data/wanyun/cv_10/source_',
+                                    self.dataset_index.split('_')[0], '.npy'])
+        self.target_path = ''.join(['/data2/pancreas/box_data/wanyun/cv_10/target_',
+                                    self.dataset_index, '.npy'])
+        
+        self.model_path = ''.join(['../results/', self.exp_name,
+                                   '/models/', run_name, '.h5'])
+        self.acc_path = ''.join(['../results/', self.exp_name,
+                                 '/acc/', run_name, '.png'])
+        self.loss_path = ''.join(['../results/', self.exp_name,
+                                  '/loss/', run_name, '.png'])
+        self.roc_source_path = ''.join(['../results/', self.exp_name,
+                                 '/source_rocs/', run_name, '.png'])
+        self.roc_target_path = ''.join(['../results/', self.exp_name,
+                                 '/target_rocs/', run_name, '.png'])
+        self.weight_path = ''.join(['../results/source/models/source_',
+                                    self.dataset_index.split('_')[0], '_300.h5'])
             
-
-
-                

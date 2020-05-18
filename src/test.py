@@ -26,50 +26,30 @@ from sklearn.metrics import confusion_matrix, roc_curve, auc
 from sklearn import metrics
 
 from utils import load_config, find_threshold, predict_binary
-from data_loader.data_loader import get_patches
+from data_loader.data_loader import get_patches, dataset, exp_path
 from net_keras import *
 
 
 # Work on each data
-def exp_res(filename, config, type_ext, trans):
-    print('Processing on ', filename)
-
-    with open(filename , 'r') as reader:
-        case = json.loads(reader.read())
-        case_partition = case['partition']
-
-    valid_X, valid_y, valid_idx = get_patches(
-        config, case_partition, mode='validation')
-
-    valid_X = np.array(valid_X)
-    valid_X = np.expand_dims(valid_X, axis=-1)
-    valid_y = np.array(valid_y)
-
-    # ntuh and ext data generation
-    if type_ext == 'ntuh':
-        case_partition[1]['test'] = []
-        case_partition[2]['test'] = []
+def exp_res(filename, config, type_target):
+    
+    # source and target data generation
+    name = exp_path(filename)
+    if type_target == 'source':
+        [train, valid, test] = np.load(
+            name.source_path, allow_pickle=True)
     else:
-        case_partition[0]['test'] = []
+        [train, valid, test] = np.load(
+            name.target_path, allow_pickle=True)
 
-    test_X, test_y, test_idx = get_patches(
-        config, case_partition, mode='test')
-
-    test_X = np.array(test_X)
-    test_X = np.expand_dims(test_X, axis=-1)
-    test_y = np.array(test_y)
+    valid_X = valid.X
+    valid_y = valid.y
+    test_X = test.X
+    test_y = test.y
 
     # Load and complie model
     model = eval(config['model']['name'])(config['dataset']['input_dim'])
-    model_name = filename.split('/')[-1].split('.')[0]
-    if trans == "trans":
-        model.load_weights(os.path.join(
-            '../models', model_name + '_trans', 'weights.h5'))
-        weights, biases = model.layers[0].get_weights()
-    else:
-        model.load_weights(os.path.join(
-            '../models', model_name, 'weights.h5'))
-        weights, biases = model.layers[0].get_weights()
+    model.load_weights(name.model_path)
 
     model.compile(
         loss=keras.losses.binary_crossentropy,
@@ -99,13 +79,10 @@ def exp_res(filename, config, type_ext, trans):
     plt.show()
 
     # Save figures
-    fig_name = 'roc_' + type_ext + '_' + filename.split('/')[-1]
-    if trans == "trans":
-        plt.savefig(os.path.join(exp_path + '/rocs/',
-                                 fig_name + '_trans.png'))
+    if type_target == 'source':
+        plt.savefig(name.roc_source_path)
     else:
-        plt.savefig(os.path.join(exp_path + '/rocs/',
-                                 fig_name + '.png'))
+        plt.savefig(name.roc_target_path)
 
     # Calculate other data
     patch_fpr, patch_tpr, patch_thresholds = roc_curve(test_y, probs)
@@ -121,7 +98,7 @@ def exp_res(filename, config, type_ext, trans):
     specificity = patch_matrix[1][1] / (test_y.shape[0] - np.sum(test_y))
 
     print('AUC: ', roc_auc)
-    result = pd.DataFrame({'exp_name': filename,
+    result = pd.DataFrame({'exp_name': name.run_name,
                            'AUC': [roc_auc],
                            'accuracy': [accuracy],
                            'sensitivity': [sensitivity],
@@ -134,69 +111,39 @@ def exp_res(filename, config, type_ext, trans):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-e", "--exp_name", default=None, type=str,
+parser.add_argument("-r", "--run_name", default=None, type=str,
                     help="run name for this experiment. (Default: time)")
-parser.add_argument("-t", "--trans", default=None, type=str,
-                    help="trans")
+parser.add_argument("-d", "--dev", default=None, type=str,
+                    help="device")
 args = parser.parse_args()
-exp_name = args.exp_name
+run_name = args.run_name
 
 # Load Configs
 config = load_config('./configs/basic.yml')
 
 # Env Settings
-os.environ["CUDA_VISIBLE_DEVICES"] = config['system']['CUDA_VISIBLE_DEVICES']
+os.environ["CUDA_VISIBLE_DEVICES"] = args.dev
 gpu_options = tf.GPUOptions(allow_growth=True)
 sess_config = tf.ConfigProto(gpu_options=gpu_options)
 set_session(tf.Session(config=sess_config))
 
-# Create Experiment Folder
-exp_path = os.path.join('../result', args.exp_name)
-if not os.path.isdir(exp_path + '/models/'):
-    os.mkdir(exp_path + '/models/')
-    os.mkdir(exp_path + '/figures/')
-    os.mkdir(exp_path + '/rocs/')
-    os.mkdir(exp_path + '/trans_models/')
-    os.mkdir(exp_path + '/trans_figures/')
-    os.mkdir(exp_path + '/trans_rocs/')
+# Work on target test set
+exp_list = os.listdir(''.json('../results/', run_name, '/models/'))
+exp_list = [exp.replace('weights', run_name).replace('.h5', '') for exp in exp_list]
 
-# Work on ntuh test set
 index = 0
-print('Processing on experiment ', args.exp_name)
-for filename in os.listdir(exp_path + '/jsons/'):
-    name = filename.split('.')[0]
-    res_list = exp_res(exp_path + '/jsons/' + filename,
-                       config, 'ntuh', args.trans)
-    Result_ntuh = pd.concat([Result_ntuh, res_list]) if index == 1 else res_list
+for filename in exp_list:
+    res_list = exp_res(filename, config, 'source')
+    Result_source = pd.concat([Result_target, res_list]) if index == 1 else res_list
     index = 1
-
-# Work on ext test set
 index = 0
-for filename in os.listdir(exp_path + '/jsons/'):
-    if args.trans == "trans":
-        name = filename.split('.')[0] + "_trans"
-    else:
-        name = filename.split('.')[0]
-    res_list = exp_res(exp_path + '/jsons/' + filename,
-                       config, 'ext', args.trans)
-    Result_ext = pd.concat([Result_ext, res_list]) if index == 1 else res_list
-
-    copyfile(os.path.join('../result', name, 'acc_plot.png'),
-             exp_path + '/figures/acc_' + name + '.png')
-    copyfile(os.path.join('../result', name, 'loss_plot.png'),
-             exp_path + '/figures/loss_' + name + '.png')
-    copyfile(os.path.join('../models', name , 'weights.h5'),
-             exp_path + '/models/' + name + '.h5')
+for filename in exp_list:
+    res_list = exp_res(filename, config, 'target')
+    Result_target = pd.concat([Result_target, res_list]) if index == 1 else res_list
     index = 1
 
 # Save .csv files
-if args.trans == "trans":
-    Result_ntuh.to_csv(
-        os.path.join(exp_path, (args.exp_name + '_ntuh_trans.csv')))
-    Result_ext.to_csv(
-        os.path.join(exp_path, (args.exp_name + '_ext_trans.csv')))
-else:
-    Result_ntuh.to_csv(
-        os.path.join(exp_path, (args.exp_name + '_ntuh.csv')))
-    Result_ext.to_csv(
-        os.path.join(exp_path, (args.exp_name + '_ext.csv')))
+Result_source.to_csv(''.join([
+    '../results/', run_name, '_source.csv']))
+Result_target.to_csv(''.join([
+    '../results/', run_name, '_target.csv']))

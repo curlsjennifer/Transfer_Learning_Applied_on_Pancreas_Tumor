@@ -24,7 +24,7 @@ from sklearn.utils import class_weight
 from sklearn.metrics import confusion_matrix
 
 from utils import load_config, find_threshold, predict_binary
-from data_loader.data_loader import get_patches
+from data_loader.data_loader import get_patches, dataset, exp_path
 from data_description.visualization import show_train_history
 from net_keras import *
 
@@ -34,7 +34,7 @@ def matrix_R(p1, p2, diff, lambda_1=1, lambda_2=1):
     else:
         return -lambda_2 * (p1 - p2) * (math.log(p1/p2))
     
-def sort_ext(label, ext_X, ext_y, ext_idx, model, alpha=0.2):
+def sort_ext(label, ext_X, ext_y, ext_idx, model, alpha=0.25):
     start = sum([id[2] for id in ext_idx[:label]])
     end = start + ext_idx[label][2]
     ext_X = ext_X[start:end]
@@ -49,77 +49,39 @@ def sort_ext(label, ext_X, ext_y, ext_idx, model, alpha=0.2):
     S = [[i, S[i][0]] for i in range(len(S))]
     return sum([sum([matrix_R(p1, p2, ind1 - ind2) 
                      for ind1, p1 in S]) for ind2, p2 in S])
-    
 # Parse Args
+plt.switch_backend('agg')
 parser = argparse.ArgumentParser()
-parser.add_argument("-c", "--config", default='./configs/base.yml',
-                    type=str, help="train configuration")
 parser.add_argument("-r", "--run_name", default=None, type=str,
                     help="run name for this experiment. (Default: time)")
-parser.add_argument("-j", "--json", default=None, type=str,
-                    help="case json")
-parser.add_argument("-l", "--fix_layer", default=None, type=int,
-                    help="parameter for cross validation")
-parser.add_argument("-m", "--origin_model", default=None, type=str,
-                    help="origin_model")  
 parser.add_argument("-d", "--dev", default=None, type=str,
-                    help="device")                 
+                    help="device")
 args = parser.parse_args()
 
-# Load config
-config = load_config(args.config)
-config['system']['CUDA_VISIBLE_DEVICES'] = args.dev
-exp_name = args.run_name
-
-# Set path
-model_path = os.path.join(config['log']['model_dir'], exp_name)
-if not os.path.isdir(model_path):
-    os.makedirs(model_path)
-result_basepath = os.path.join(
-    config['log']['result_dir'], exp_name)
-if not os.path.isdir(result_basepath):
-    os.makedirs(result_basepath)
-
 # Env settings
-os.environ["CUDA_VISIBLE_DEVICES"] = config['system']['CUDA_VISIBLE_DEVICES']
+os.environ["CUDA_VISIBLE_DEVICES"] = args.dev
 gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
 sess_config = tf.compat.v1.ConfigProto(gpu_options=gpu_options)
 set_session(tf.compat.v1.Session(config=sess_config))
 
-# Split cases into train, val, test
-with open(args.json + '.json' , 'r') as reader:
-    case = json.loads(reader.read())
-    ntuh_partition, tcia_partition, msd_partition = case['partition']
-    ntuh_partition['train'] = []
-    ntuh_partition['validation'] = []
+# Load config and set paths
+config = load_config('./configs/basic.yml')
+name = exp_path(args.run_name)
 
-# Get train patches
-ext_X, ext_y, ext_idx = get_patches(
-    config, [ntuh_partition, tcia_partition, msd_partition], mode='train')
+# Load training and validation data
+[target_train, target_valid, target_test] = np.load(
+    name.target_path, allow_pickle=True)
 
-ext_X = np.array(ext_X)
-ext_X = ext_X.reshape(
-    ext_X.shape[0], ext_X.shape[1], ext_X.shape[2], 1)
-ext_y = np.array(ext_y)
-steps_per_epoch = int(len(ext_y) / config['train']['batch_size'])
-
-# Get valid patches
-valid_X, valid_y, valid_idx = get_patches(
-    config, [ntuh_partition, tcia_partition, msd_partition], mode='validation')
-
-valid_X = np.array(valid_X)
-valid_X = valid_X.reshape(
-    valid_X.shape[0], valid_X.shape[1], valid_X.shape[2], 1)
-valid_y = np.array(valid_y)
-
-print("Finish loading {} patches from {} studies".format(
-    valid_X.shape[0], len(valid_idx)))
-print("With {} lesion patches and {} normal pancreas patches".format(
-    np.sum(valid_y), valid_X.shape[0] - np.sum(valid_y)))
+ext_X = target_train.X
+ext_y = target_train.y
+ext_idx = target_train.idx
+valid_X = target_valid.X
+valid_y = target_valid.y
+valid_idx = target_valid.idx
 
 # Model Init
 model = eval(config['model']['name'])(config['dataset']['input_dim'])
-model.load_weights(args.origin_model, by_name=True)
+model.load_weights(name.weight_path, by_name=True)
 
 model.compile(
     loss=keras.losses.binary_crossentropy,
@@ -137,7 +99,7 @@ class_weights = class_weight.compute_class_weight(
     'balanced', np.unique(ext_y), ext_y)
 print("Setting class weights {}".format(class_weights))
 
-item_num = 20
+item_num = 50
 tar_X = np.zeros((0, 50, 50, 1))
 tar_y = []
 tar_idx = []
@@ -180,9 +142,9 @@ while np.shape(ext_X)[0] > 0:
     tar_idx.extend(do_idx)    
     
     print("Num of do : ", np.shape(do_idx)[0],
-          "Num of ext : ", np.shape(ext_idx)[0], 
-          "Num of tar : ", np.shape(tar_idx)[0], 
-          "Num of prev ext : ", np.shape(o_ext_idx)[0])
+          "\nNum of ext : ", np.shape(ext_idx)[0], 
+          "\nNum of tar : ", np.shape(tar_idx)[0], 
+          "\nNum of prev ext : ", np.shape(o_ext_idx)[0])
     
     datagen = ImageDataGenerator(
     horizontal_flip=True,
@@ -198,14 +160,6 @@ while np.shape(ext_X)[0] > 0:
         steps_per_epoch=steps_per_epoch,
         class_weight=class_weights,
         validation_data=(valid_X, valid_y))
-    
-    # model.fit(tar_X, np.array(tar_y), 
-    #             epochs=10, 
-    #             callbacks=cbs, 
-    #             validation_data=(valid_X, valid_y),
-    #             steps_per_epoch=steps_per_epoch, 
-    #             validation_steps=int(len(valid_X) / config['train']['batch_size']),
-    #             class_weight=class_weights)
-    
 
-model.save_weights(os.path.join(model_path, 'weights.h5'))
+    model.save_weights(name.model_path.replace(
+        args.run_name, args.run_name + '_' + str(np.shape(tar_idx)[0])))

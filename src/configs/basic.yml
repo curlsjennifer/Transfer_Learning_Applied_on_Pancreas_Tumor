@@ -25,7 +25,7 @@ validation:
     batch_size: 512
 
 dataset:
-    dir: '/data2/pancreas/box_data/wanyun'
+    dir: '/data2/pancreas/box_data/wanyun/cv_10/'
     csv: '/data2/pancreas/Nifti_data/data_list.csv'
     holger: '/data2/pancreas/results/tmp'
     input_dim: [50, 50, 1]  # HWC
