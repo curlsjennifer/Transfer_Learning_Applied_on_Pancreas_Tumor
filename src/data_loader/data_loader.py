@@ -301,26 +301,24 @@ class dataset:
 class exp_path:
     def __init__(self, run_name, inc=False):
         self.run_name = run_name
-        self.exp_name = '_'.join(run_name.split('_')[:-2])
+        self.exp_name = '_'.join(self.run_name.split('_')[:-2])
         if inc:
-            self.exp_name = '_'.join(run_name.split('_')[:-1])
+            self.exp_name = '_'.join(self.exp_name.split('_')[:-1])
         self.dataset_index = '_'.join(run_name.split('_')[-2:])
-        
         self.source_path = ''.join(['/data2/pancreas/box_data/wanyun/cv_10/source_',
                                     self.dataset_index.split('_')[0], '.npy'])
         self.target_path = ''.join(['/data2/pancreas/box_data/wanyun/cv_10/target_',
                                     self.dataset_index, '.npy'])
-        
         self.model_path = ''.join(['../results/', self.exp_name,
-                                   '/models/', run_name, '.h5'])
+                                   '/models/', self.run_name, '.h5'])
         self.acc_path = ''.join(['../results/', self.exp_name,
-                                 '/acc/', run_name, '.png'])
+                                 '/acc/', self.run_name, '.png'])
         self.loss_path = ''.join(['../results/', self.exp_name,
-                                  '/loss/', run_name, '.png'])
+                                  '/loss/', self.run_name, '.png'])
         self.roc_source_path = ''.join(['../results/', self.exp_name,
-                                 '/source_rocs/', run_name, '.png'])
+                                 '/source_rocs/', self.run_name, '.png'])
         self.roc_target_path = ''.join(['../results/', self.exp_name,
-                                 '/target_rocs/', run_name, '.png'])
+                                 '/target_rocs/', self.run_name, '.png'])
         self.weight_path = ''.join(['../results/source/models/source_',
                                     self.dataset_index.split('_')[0], '_300.h5'])
             

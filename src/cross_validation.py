@@ -10,12 +10,12 @@ import os
 
 # Fixed variables
 config_name = './configs/basic.yml'
-dev = "'0'"
+dev = "'1'"
 fold = 10
 
 # Modified variables
 fix_layer = 3 # transfer
-exp_name = 'inc_test'
+exp_name = 'inc_test_2'
 num_tar = 300
 
 # Create folders
@@ -29,7 +29,7 @@ if not os.path.isdir(model_path):
 
 # Transfer learning or mix data for each small model
 cross_exp_name = ['_'.join([exp_name, str(ind), str(num_tar)])
-                   for ind in range(2)]
+                   for ind in range(6, 10)]
 
 for data_name in cross_exp_name:
     print("Working on experiment : ", data_name)

@@ -34,7 +34,7 @@ from net_keras import *
 def exp_res(filename, config, type_target):
     
     # source and target data generation
-    name = exp_path(filename)
+    name = exp_path(filename, inc=True)
     if type_target == 'source':
         [train, valid, test] = np.load(
             name.source_path, allow_pickle=True)
@@ -98,7 +98,7 @@ def exp_res(filename, config, type_target):
     specificity = patch_matrix[1][1] / (test_y.shape[0] - np.sum(test_y))
 
     print('AUC: ', roc_auc)
-    result = pd.DataFrame({'exp_name': name.run_name,
+    result = pd.DataFrame({'exp_name': filename,
                            'AUC': [roc_auc],
                            'accuracy': [accuracy],
                            'sensitivity': [sensitivity],
@@ -128,22 +128,24 @@ sess_config = tf.ConfigProto(gpu_options=gpu_options)
 set_session(tf.Session(config=sess_config))
 
 # Work on target test set
-exp_list = os.listdir(''.json('../results/', run_name, '/models/'))
+exp_list = os.listdir(''.join(['../results/', run_name, '/models/']))
 exp_list = [exp.replace('weights', run_name).replace('.h5', '') for exp in exp_list]
 
 index = 0
 for filename in exp_list:
+    print(filename)
     res_list = exp_res(filename, config, 'source')
-    Result_source = pd.concat([Result_target, res_list]) if index == 1 else res_list
+    Result_source = pd.concat([Result_source, res_list]) if index == 1 else res_list
     index = 1
+Result_source.to_csv(''.join([
+    '../results/', run_name, '/source.csv']))
+
 index = 0
 for filename in exp_list:
+    print(filename)
     res_list = exp_res(filename, config, 'target')
     Result_target = pd.concat([Result_target, res_list]) if index == 1 else res_list
     index = 1
 
-# Save .csv files
-Result_source.to_csv(''.join([
-    '../results/', run_name, '_source.csv']))
 Result_target.to_csv(''.join([
-    '../results/', run_name, '_target.csv']))
+    '../results/', run_name, '/target.csv']))

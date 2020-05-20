@@ -118,10 +118,10 @@ while np.shape(ext_X)[0] > 0:
     do_y = []
     do_idx = []
     
-    print(np.shape(o_ext_X), np.shape(o_ext_y), np.shape(o_ext_idx))
     res = [sort_ext(label, o_ext_X, o_ext_y, o_ext_idx, model) 
            for label in range(len(o_ext_idx))]
     
+    #index = random.shuffle(range(len(res)))[:item_num]
     index = sorted(range(len(res)), key = lambda k : res[k])[:item_num]
 
     end = 0
@@ -162,4 +162,4 @@ while np.shape(ext_X)[0] > 0:
         validation_data=(valid_X, valid_y))
 
     model.save_weights(name.model_path.replace(
-        args.run_name, args.run_name + '_' + str(np.shape(tar_idx)[0])))
+        name.dataset_index, str(np.shape(tar_idx)[0]) + '_' + name.dataset_index))
