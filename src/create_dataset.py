@@ -5,7 +5,7 @@ date : 2020/05/13
 description :
     use create .json files to generate train/valid/test
     dataser for cross validation.
-Use : python create_dataset.py -f 10 -p '../cv_10/' -n 50
+Use : python create_dataset.py -f 10 -p '/data2/pancreas/box_data/wanyun/cv_10/' -n 50
 """
 
 import os
@@ -19,19 +19,20 @@ from pandas import DataFrame
 from shutil import copyfile, rmtree
 
 from utils import load_config
-from data_loader.data_loader import get_patches
+from data_loader.data_loader import get_patches, dataset
 
-class dataset:
-    def __init__(self, info, mode):
-        onfig = load_config('./configs/basic.yml')
-        X, y, idx = get_patches(config, info, mode=mode)
-        X = np.array(X)
-        X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
-        y = np.array(y)
-        self.X=X
-        self.y=y
-        self.idx=idx
-        self.mode=mode
+# class dataset:
+#     def __init__(self, info, mode):
+#         onfig = load_config('./configs/basic.yml')
+#         X, y, idx, coord = get_patches(config, info, mode=mode)
+#         X = np.array(X)
+#         X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
+#         y = np.array(y)
+#         self.X = X
+#         self.y = y
+#         self.idx = idx
+#         self.coord = coord
+#         self.mode = mode
     
 # Parse Args
 parser = argparse.ArgumentParser()

@@ -26,6 +26,8 @@ if not os.path.isdir(model_path):
     os.makedirs(model_path.replace('models', 'loss'))
     os.makedirs(model_path.replace('models', 'source_rocs'))
     os.makedirs(model_path.replace('models', 'target_rocs'))
+    os.makedirs(model_path.replace('models', 'source_patch'))
+    os.makedirs(model_path.replace('models', 'target_patch'))
 
 # Transfer learning or mix data for each small model
 cross_exp_name = ['_'.join([exp_name, str(ind), str(num_tar)])

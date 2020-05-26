@@ -11,6 +11,7 @@ import copy
 import json
 import time
 import argparse
+import collections
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -91,13 +92,37 @@ def exp_res(filename, config, type_target):
     loss, accuracy = model.evaluate(test_X, test_y)
     y_predict = model.predict_classes(test_X)
 
-    probs = predict_binary(probs, patch_threshold)
-    patch_matrix = confusion_matrix(test_y, probs, labels=[1, 0])
+    probs_binary = predict_binary(probs, patch_threshold)
+    # false_item = np.reshape(test_y, (len(probs), 1))
+    #             - np.reshape(probs, (len(probs), 1))
+    
+    # idx = []
+    # for it_source, it_name, it_len in test.idx:
+    #     idx.extend([it_name] * it_len)
+    # false_item_test = [idx[i] for i in range(len(idx)) if false_item[i]==1]
+    # false_item_true = [idx[i] for i in range(len(idx)) if false_item[i]==-1]
+    
+    # coll_test = collections.Counter(false_item_test)
+    # coll_true = collections.Counter(false_item_true)
+    
+    # name_false = pd.DataFrame({'exp_name': [filename]*len(test.idx),
+    #                         'item_source': [test.idx[i][0] for i in range(len(test.idx))],
+    #                         'item_name': [test.idx[i][1] for i in range(len(test.idx))],
+    #                        'false_test': [coll[test.idx[i][1]] for i in range(len(test.idx))],
+    #                        'len':[test.idx[i][2] for i in range(len(test.idx))],
+    #                        'test_ind':[filename.split('_')[3] for i in range(len(test.idx))],
+    #                        'test_num':[filename.split('_')[4] for i in range(len(test.idx))],
+    #                        'rate': [coll[test.idx[i][1]]/test.idx[i][2] for i in range(len(test.idx))],
+    #                         'AUC':[roc_auc for i in range(len(test.idx))]
+    #                        })
+    
+    patch_matrix = confusion_matrix(test_y, probs_binary, labels=[1, 0])
     accuracy = (patch_matrix[0][0] + patch_matrix[1][1]) / test_y.shape[0]
     sensitivity = patch_matrix[0][0] / np.sum(test_y)
     specificity = patch_matrix[1][1] / (test_y.shape[0] - np.sum(test_y))
 
     print('AUC: ', roc_auc)
+    
     result = pd.DataFrame({'exp_name': filename,
                            'AUC': [roc_auc],
                            'accuracy': [accuracy],
@@ -107,7 +132,16 @@ def exp_res(filename, config, type_target):
                            'FP': [patch_matrix[1][0]],
                            'FN': [patch_matrix[0][1]],
                            'PN': [patch_matrix[1][1]]})
-    return result
+    name_false = []
+    
+    if type_target == 'source':
+        np.save(name.patch_source_path, 
+                [test_y, probs_binary, probs, patch_threshold, roc_auc])
+    else:
+        np.save(name.patch_target_path, 
+                [test_y, probs_binary, probs, patch_threshold, roc_auc])
+        
+    return result, name_false
 
 
 parser = argparse.ArgumentParser()
@@ -134,18 +168,25 @@ exp_list = [exp.replace('weights', run_name).replace('.h5', '') for exp in exp_l
 index = 0
 for filename in exp_list:
     print(filename)
-    res_list = exp_res(filename, config, 'source')
+    res_list, name_false = exp_res(filename, config, 'source')
     Result_source = pd.concat([Result_source, res_list]) if index == 1 else res_list
+    #False_source = pd.concat([False_source, name_false]) if index == 1 else name_false
     index = 1
+    
 Result_source.to_csv(''.join([
     '../results/', run_name, '/source.csv']))
+# False_source.to_csv(''.join([
+#     '../results/', run_name, '/source_false.csv']))
 
 index = 0
 for filename in exp_list:
     print(filename)
-    res_list = exp_res(filename, config, 'target')
+    res_list, name_false = exp_res(filename, config, 'target')
     Result_target = pd.concat([Result_target, res_list]) if index == 1 else res_list
+    #False_target = pd.concat([False_target, name_false]) if index == 1 else name_false
     index = 1
 
 Result_target.to_csv(''.join([
     '../results/', run_name, '/target.csv']))
+# False_target.to_csv(''.join([
+#     '../results/', run_name, '/target_false.csv']))

@@ -11,7 +11,7 @@ import nibabel as nib
 from random import shuffle
 import SimpleITK as sitk
 
-
+from utils import load_config
 from data_loader.patch_sampler import patch_generator
 from data_loader.patch_sampler import masked_2D_sampler
 from data_loader.preprocessing import (
@@ -163,22 +163,27 @@ class DataGenerator():
     def generate_patch(self, image, pancreas, lesion):
         X = []
         Y = []
+        coord_patch = []
 
         self.coords = masked_2D_sampler(lesion, pancreas,
                                         self.patch_size, self.stride, threshold=1 / (self.patch_size ** 2))
 
         image[np.where(pancreas == 0)] = 0
+        p_shape = np.shape(pancreas)
 
         for coord in self.coords:
             mask_pancreas = image[coord[1]
                                   :coord[4], coord[2]:coord[5], coord[3]]
             X.append(mask_pancreas)
             Y.append(coord[0])
+            coord_patch.append([coord[1],coord[4], coord[2],coord[5], coord[3],
+                                p_shape[0], p_shape[1], p_shape[2]])
 
         self.X = X
         self.Y = Y
+        self.coord_patch = coord_patch
 
-        return X, Y
+        return X, Y, coord_patch
 
     def patch_len(self):
         return len(self.X)
@@ -229,6 +234,7 @@ def get_patches(config, case_partition, mode='train'):
     X = []
     y = []
     idx = []
+    coord_patch = []
     patch_size = config['dataset']['input_dim'][0]
     stride = config['dataset']['stride']
     load_way = config['dataset']['load']
@@ -246,13 +252,14 @@ def get_patches(config, case_partition, mode='train'):
                     box_img, box_pan, box_les)
             elif load_way == 'box':
                 image, pancreas, lesion = datagen.load_box(case_id)
-            tmp_X, tmp_y = datagen.generate_patch(
+            tmp_X, tmp_y, tmp_c = datagen.generate_patch(
                 image, pancreas, lesion)
             X = X + tmp_X
             y = y + tmp_y
+            coord_patch = coord_patch + tmp_c
             idx.append([partition['type'], case_id, len(tmp_y)])
 
-    return X, y, idx
+    return X, y, idx, coord_patch
 
 
 def save_boxdata(config, case_partition, mode='train'):
@@ -288,15 +295,16 @@ def save_boxdata(config, case_partition, mode='train'):
     
 class dataset:
     def __init__(self, info, mode):
-        onfig = load_config('./configs/basic.yml')
-        X, y, idx = get_patches(config, info, mode=mode)
+        config = load_config('./configs/basic.yml')
+        X, y, idx, coord = get_patches(config, info, mode=mode)
         X = np.array(X)
         X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
         y = np.array(y)
-        self.X=X
-        self.y=y
-        self.idx=idx
-        self.mode=mode
+        self.X = X
+        self.y = y
+        self.idx = idx
+        self.coord = coord
+        self.mode = mode
         
 class exp_path:
     def __init__(self, run_name, inc=False):
@@ -319,6 +327,12 @@ class exp_path:
                                  '/source_rocs/', self.run_name, '.png'])
         self.roc_target_path = ''.join(['../results/', self.exp_name,
                                  '/target_rocs/', self.run_name, '.png'])
+        self.patch_source_path = ''.join(['../results/', self.exp_name,
+                                 '/source_patch/', self.run_name, '.npy'])
+        self.patch_target_path = ''.join(['../results/', self.exp_name,
+                                 '/target_patch/', self.run_name, '.npy'])
         self.weight_path = ''.join(['../results/source/models/source_',
                                     self.dataset_index.split('_')[0], '_300.h5'])
-            
+
+        
+        
