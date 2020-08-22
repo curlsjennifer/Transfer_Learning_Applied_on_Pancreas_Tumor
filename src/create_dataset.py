@@ -5,7 +5,7 @@ date : 2020/05/13
 description :
     use create .json files to generate train/valid/test
     dataser for cross validation.
-Use : python create_dataset.py -f 10 -p '/data2/pancreas/box_data/wanyun/cv_10/' -n 50
+Use : python create_dataset.py -i 0 -n 40
 """
 
 import os
@@ -20,33 +20,22 @@ from shutil import copyfile, rmtree
 
 from utils import load_config
 from data_loader.data_loader import get_patches, dataset
-
-# class dataset:
-#     def __init__(self, info, mode):
-#         onfig = load_config('./configs/basic.yml')
-#         X, y, idx, coord = get_patches(config, info, mode=mode)
-#         X = np.array(X)
-#         X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
-#         y = np.array(y)
-#         self.X = X
-#         self.y = y
-#         self.idx = idx
-#         self.coord = coord
-#         self.mode = mode
     
 # Parse Args
 parser = argparse.ArgumentParser()
-parser.add_argument("-f", "--fold", default=None, type=int,
-                    help="fold for cross validation") 
-parser.add_argument("-p", "--dataset_path", default=None, type=str,
+parser.add_argument("-i", "--partition_index", default=None, type=int,
                     help="path to save files")  
 parser.add_argument("-n", "--num_of_ext", default=None, type=int,
                     help="number of ext file per step")             
 args = parser.parse_args()
-fold = args.fold
+
+# Set parameters
+fold = 10
 num_of_ext = args.num_of_ext
-dataset_path = args.dataset_path
+dataset_path = '/data2/pancreas/box_data/wanyun/box_' + str(args.partition_index) + '/'
 config = load_config('./configs/basic.yml')
+config['dataset']['seed'] = str(args.partition_index)
+#os.makedirs(dataset_path)
 
 # Create folders for .json files
 list_location = '/data2/pancreas/box_data/wanyun/patient_list.npy'
@@ -56,6 +45,11 @@ print('Creating jsons files......')
 [nh_list, nc_list, eh_list, ec_list] = np.load(list_location,
                                                 allow_pickle=True)
 print(np.shape(nh_list), np.shape(nc_list), np.shape(eh_list), np.shape(ec_list))
+random.Random(config['dataset']['seed']).shuffle(nh_list)
+random.Random(config['dataset']['seed']).shuffle(nc_list)
+random.Random(config['dataset']['seed']).shuffle(eh_list)
+random.Random(config['dataset']['seed']).shuffle(ec_list)
+
 # Calculate parameters for spliting train/validation/test sets
 test_num_h = int(np.around(len(nh_list) / fold))
 test_num_c = int(np.around(len(nc_list) / fold))
@@ -74,6 +68,7 @@ for index in range(fold):
     ntuh_partition['type'] = 'ntuh'
     ntuh_partition['test'] = nh_list[test_num_h * (index):test_num_h * (index + 1)] \
     + nc_list[test_num_c * (index):test_num_c * (index + 1)]
+    print("test_ntuh", len(nh_list[test_num_h * (index):test_num_h * (index + 1)]), len(nc_list[test_num_c * (index):test_num_c * (index + 1)]))
 
     tv_h = [x for x in nh_list if x not in ntuh_partition['test']]
     random.Random(config['dataset']['seed']).shuffle(tv_h)
@@ -82,6 +77,8 @@ for index in range(fold):
 
     ntuh_partition['train'] = tv_h[val_num_h:] + tv_c[val_num_c:]
     ntuh_partition['validation'] = tv_h[:val_num_h] + tv_c[:val_num_c]
+    print("train_ntuh", len(tv_h[val_num_h:]), len(tv_c[val_num_c:]))
+    print("valid_ntuh", len(tv_h[:val_num_h]), len(tv_c[:val_num_c]))
 
     source_train = dataset([ntuh_partition], 'train')
     source_valid = dataset([ntuh_partition], 'validation')
@@ -96,8 +93,10 @@ for index in range(fold):
     msd_partition['type'] = 'msd'
     tcia_partition['test'] = eh_list[
         test_num_h_e * (index):test_num_h_e * (index + 1)]
+    print("test_tcia", len(tcia_partition['test']))
     msd_partition['test'] = ec_list[
         test_num_c_e * (index):test_num_c_e * (index + 1)]
+    print("test_msd", len(msd_partition['test']))
 
     tv_h = [x for x in eh_list if x not in tcia_partition['test']]
     random.Random(config['dataset']['seed']).shuffle(tv_h)
@@ -119,6 +118,10 @@ for index in range(fold):
         msd_partition['train'] = t_c[:num_t_c]
         tcia_partition['validation'] = v_h[:num_v_h]
         msd_partition['validation'] = v_c[:num_v_c]
+        print("train_tcia", len(tcia_partition['train']))
+        print("train_msd", len(msd_partition['train']))
+        print("valid_tcia", len(tcia_partition['validation']))
+        print("valid_msd", len(msd_partition['validation']))
 
         target_train = dataset([tcia_partition, msd_partition], 'train')
         target_valid = dataset([tcia_partition, msd_partition], 'validation')

@@ -11,6 +11,7 @@ import json
 import argparse
 import numpy as np
 import pandas as pd
+import datetime
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
@@ -51,10 +52,15 @@ name = exp_path(args.run_name)
 [target_train, target_valid, target_test] = np.load(
     name.target_path, allow_pickle=True)
 
-train_X = source_train.X
-train_y = source_train.y
-valid_X = source_valid.X
-valid_y = source_valid.y
+train_X = target_train.X
+train_y = target_train.y
+valid_X = target_valid.X
+valid_y = target_valid.y
+
+# train_X = np.concatenate((source_train.X, target_train.X), axis = 0)
+# train_y = np.concatenate((source_train.y, target_train.y), axis = 0)
+# valid_X = np.concatenate((source_valid.X, target_valid.X), axis = 0)
+# valid_y = np.concatenate((source_valid.y, target_valid.y), axis = 0)
 
 # Data Generators - Keras
 datagen = ImageDataGenerator(
@@ -79,6 +85,8 @@ cbs = [
 class_weights = class_weight.compute_class_weight(
     'balanced', np.unique(train_y), train_y)
 
+starttime = datetime.datetime.now()
+
 # Model Training
 history = model.fit_generator(
     datagen.flow(train_X, train_y, batch_size=config['train']['batch_size']),
@@ -87,6 +95,7 @@ history = model.fit_generator(
     steps_per_epoch=len(train_X) / config['train']['batch_size'],
     class_weight=class_weights,
     validation_data=(valid_X, valid_y))
+endtime = datetime.datetime.now()
 
 # Save the results
 model.save_weights(name.model_path)
@@ -96,3 +105,5 @@ plt.savefig(name.acc_path)
 
 fig_loss = show_train_history(history, 'loss', 'val_loss')
 plt.savefig(name.loss_path)
+np.save(name.time, (endtime - starttime).seconds)
+print("Totally training time : ", (endtime - starttime).seconds, "seconds.")

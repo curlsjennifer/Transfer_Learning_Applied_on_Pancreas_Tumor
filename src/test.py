@@ -4,6 +4,7 @@ author : WanYun, Yang
 date : 2020/04/12
 description :
     calculate the AUC of the cross validation experiments.
+use : python test.py -r 'inc_test' -d '0'
 """
 
 import os
@@ -35,18 +36,24 @@ from net_keras import *
 def exp_res(filename, config, type_target):
     
     # source and target data generation
+    print(filename)
     name = exp_path(filename, inc=True)
+    print(name.source_path)
     if type_target == 'source':
         [train, valid, test] = np.load(
             name.source_path, allow_pickle=True)
     else:
+        if name.target_path.split('_')[-1] == "0.npy":
+            name.target_path = '_'.join(name.target_path.split('_')[:-1]) + "_200.npy"
         [train, valid, test] = np.load(
             name.target_path, allow_pickle=True)
 
     valid_X = valid.X
     valid_y = valid.y
+    valid_idx = valid.idx
     test_X = test.X
     test_y = test.y
+    test_idx = test.idx
 
     # Load and complie model
     model = eval(config['model']['name'])(config['dataset']['input_dim'])
@@ -93,29 +100,6 @@ def exp_res(filename, config, type_target):
     y_predict = model.predict_classes(test_X)
 
     probs_binary = predict_binary(probs, patch_threshold)
-    # false_item = np.reshape(test_y, (len(probs), 1))
-    #             - np.reshape(probs, (len(probs), 1))
-    
-    # idx = []
-    # for it_source, it_name, it_len in test.idx:
-    #     idx.extend([it_name] * it_len)
-    # false_item_test = [idx[i] for i in range(len(idx)) if false_item[i]==1]
-    # false_item_true = [idx[i] for i in range(len(idx)) if false_item[i]==-1]
-    
-    # coll_test = collections.Counter(false_item_test)
-    # coll_true = collections.Counter(false_item_true)
-    
-    # name_false = pd.DataFrame({'exp_name': [filename]*len(test.idx),
-    #                         'item_source': [test.idx[i][0] for i in range(len(test.idx))],
-    #                         'item_name': [test.idx[i][1] for i in range(len(test.idx))],
-    #                        'false_test': [coll[test.idx[i][1]] for i in range(len(test.idx))],
-    #                        'len':[test.idx[i][2] for i in range(len(test.idx))],
-    #                        'test_ind':[filename.split('_')[3] for i in range(len(test.idx))],
-    #                        'test_num':[filename.split('_')[4] for i in range(len(test.idx))],
-    #                        'rate': [coll[test.idx[i][1]]/test.idx[i][2] for i in range(len(test.idx))],
-    #                         'AUC':[roc_auc for i in range(len(test.idx))]
-    #                        })
-    
     patch_matrix = confusion_matrix(test_y, probs_binary, labels=[1, 0])
     accuracy = (patch_matrix[0][0] + patch_matrix[1][1]) / test_y.shape[0]
     sensitivity = patch_matrix[0][0] / np.sum(test_y)
@@ -123,15 +107,30 @@ def exp_res(filename, config, type_target):
 
     print('AUC: ', roc_auc)
     
+        
+    # Patient-based
+    test_len = [item[2] for item in test_idx]
+    test_end = [0] + [sum(test_len[0:ind+1]) for ind in range(len(test_idx))]
+    test_p_y = [sum(test_y[test_end[ind]:test_end[ind+1]]) for ind in range(len(test_idx))] 
+    test_p_y = [1 if i > 0 else 0 for i in test_p_y]
+    test_p_predict = [predict_binary(model.predict_proba(
+                    test_X[test_end[ind]:test_end[ind+1], :, :, :]), patch_threshold)
+                    for ind in range(len(test_idx))]
+    test_p_predict = [sum(l)/len(l) for l in test_p_predict]
+    
+    fpr, tpr, threshold = metrics.roc_curve(test_p_y, test_p_predict)
+    roc_auc_p = metrics.auc(fpr, tpr)
+    
     result = pd.DataFrame({'exp_name': filename,
                            'AUC': [roc_auc],
+                           'AUC_patient': [roc_auc_p],
                            'accuracy': [accuracy],
                            'sensitivity': [sensitivity],
                            'specificity': [specificity],
                            'TP': [patch_matrix[0][0]],
                            'FP': [patch_matrix[1][0]],
                            'FN': [patch_matrix[0][1]],
-                           'PN': [patch_matrix[1][1]]})
+                           'TN': [patch_matrix[1][1]]})
     name_false = []
     
     if type_target == 'source':

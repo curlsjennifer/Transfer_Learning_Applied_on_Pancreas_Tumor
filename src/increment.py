@@ -10,6 +10,7 @@ import os
 import json
 import math
 import copy
+import random
 import argparse
 import numpy as np
 import pandas as pd
@@ -29,7 +30,9 @@ from data_description.visualization import show_train_history
 from net_keras import *
 
 def matrix_R(p1, p2, diff, lambda_1=1, lambda_2=1):
-    if diff == 0:
+    if p1 == 0:
+        return 0
+    elif diff == 0:
         return -lambda_1 * p1 * math.log(p1)
     else:
         return -lambda_2 * (p1 - p2) * (math.log(p1/p2))
@@ -55,6 +58,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-r", "--run_name", default=None, type=str,
                     help="run name for this experiment. (Default: time)")
 parser.add_argument("-d", "--dev", default=None, type=str,
+                    help="device")
+parser.add_argument("-t", "--type", default="selected", type=str,
+                    help="device")
+parser.add_argument("-n", "--num", default=40, type=int,
                     help="device")
 args = parser.parse_args()
 
@@ -99,30 +106,33 @@ class_weights = class_weight.compute_class_weight(
     'balanced', np.unique(ext_y), ext_y)
 print("Setting class weights {}".format(class_weights))
 
-item_num = 50
+item_num = int(args.num * 0.9)
 tar_X = np.zeros((0, 50, 50, 1))
 tar_y = []
 tar_idx = []
 steps_per_epoch = int(np.shape(ext_X)[0] / config['train']['batch_size'])
+history_list = []
 
 while np.shape(ext_X)[0] > 0:
     o_ext_X = copy.copy(ext_X)
     o_ext_y = copy.copy(ext_y)
     o_ext_idx = copy.copy(ext_idx)
-    
+
     ext_X = np.zeros((0, 50, 50, 1))
     ext_y = []
     ext_idx = []
-    
+
     do_X = np.zeros((0, 50, 50, 1))
     do_y = []
     do_idx = []
-    
+
     res = [sort_ext(label, o_ext_X, o_ext_y, o_ext_idx, model) 
-           for label in range(len(o_ext_idx))]
-    
-    #index = random.shuffle(range(len(res)))[:item_num]
-    index = sorted(range(len(res)), key = lambda k : res[k])[:item_num]
+            for label in range(len(o_ext_idx))]
+
+    if args.type == "selected":
+        index = sorted(range(len(res)), key = lambda k : res[k])[:item_num]
+    else:
+        index = random.sample(list(range(len(res))), item_num)
 
     end = 0
     for ind in range(len(o_ext_idx)):
@@ -136,15 +146,23 @@ while np.shape(ext_X)[0] > 0:
             ext_X = np.concatenate((ext_X, o_ext_X[start:end, :, :, :]), axis=0)
             ext_y.extend(o_ext_y[start:end])
             ext_idx.append(o_ext_idx[ind])
-    
+
     tar_X = np.concatenate((tar_X, do_X), axis=0)
     tar_y = np.concatenate((tar_y, do_y), axis=0)
     tar_idx.extend(do_idx)    
-    
+
     print("Num of do : ", np.shape(do_idx)[0],
-          "\nNum of ext : ", np.shape(ext_idx)[0], 
-          "\nNum of tar : ", np.shape(tar_idx)[0], 
-          "\nNum of prev ext : ", np.shape(o_ext_idx)[0])
+            "\nNum of ext : ", np.shape(ext_idx)[0], 
+            "\nNum of tar : ", np.shape(tar_idx)[0], 
+            "\nNum of prev ext : ", np.shape(o_ext_idx)[0])
+
+    # model = eval(config['model']['name'])(config['dataset']['input_dim'])
+    # model.load_weights(name.weight_path, by_name=True)
+    # model.compile(
+    #     loss=keras.losses.binary_crossentropy,
+    #     optimizer=keras.optimizers.Adam(lr=config['optimizer']['lr'],
+    #                                     amsgrad=True),
+    #     metrics=['accuracy'])
     
     datagen = ImageDataGenerator(
     horizontal_flip=True,
@@ -152,14 +170,17 @@ while np.shape(ext_X)[0] > 0:
     cval=0.0,
     vertical_flip=True)
     datagen.fit(tar_X)
-    
     history = model.fit_generator(
         datagen.flow(tar_X, np.array(tar_y), batch_size=config['train']['batch_size']),
-        epochs=config['train']['epochs']/10,
+        #epochs=config['train']['epochs'],
+        epochs = 66,
         callbacks=cbs,
         steps_per_epoch=steps_per_epoch,
         class_weight=class_weights,
         validation_data=(valid_X, valid_y))
+    history_list.append(history.history)
 
+    tar_len = str(int(np.round(np.shape(tar_idx)[0]/0.9)))
     model.save_weights(name.model_path.replace(
-        name.dataset_index, str(np.shape(tar_idx)[0]) + '_' + name.dataset_index))
+        name.dataset_index, tar_len + '_' + name.dataset_index))
+    np.save(name.roc_history, history_list)

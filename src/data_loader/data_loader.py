@@ -4,7 +4,9 @@ import copy
 
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import nibabel as nib
@@ -305,17 +307,80 @@ class dataset:
         self.idx = idx
         self.coord = coord
         self.mode = mode
+
+class table_generate:
+    def __init__(self):
+        self.AUC_list = []
+        self.AUC_patient_list = []
+        self.num_list = []
+        self.label_list = []
+        self.index_list = []
+        
+    def load_results(self, exp_name, target=True, inc=False, label="source"):
+        self.exp_name = exp_name
+        if target:
+            df = pd.read_csv('../results/' + exp_name + "/target.csv")
+        else:
+            df = pd.read_csv('../results/' + exp_name + "/source.csv")
+        
+        if len(self.index_list) > 0:
+            check = [exp_path(name, inc=inc).ind_num for name in df["exp_name"]]
+            for ind in range(len(df["AUC"])):
+                if not check[ind] in self.index_list:
+                    df.drop([ind], inplace=True)
+            # ind = 0
+            # for name in df["exp_name"]:
+            #     if not 200==exp_path(name, inc=inc).x and not label=="source":
+            #         print(name, ind)
+            #         df.drop([ind], inplace=True)
+            #     ind += 1
+                
+        self.label_list.extend([label] * len(df["AUC"]))
+        self.AUC_list.extend(df["AUC"])
+        self.AUC_patient_list.extend(df["AUC_patient"])
+        self.num_list.extend([exp_path(name, inc=inc).x for name in df["exp_name"]])
+        #self.num_list.extend([label for name in df["exp_name"]])
+        self.index_list.extend([exp_path(name, inc=inc).ind_num for name in df["exp_name"]])
+        
+    def plot_res(self, title, patient=False, num=True, x_label='number of target data'):
+        num_lbl = "num" if num else "index"
+        p_lbl = "patient" if patient else "patch"
+        x_value = self.num_list if num else self.index_list
+        y_value = self.AUC_patient_list if patient else self.AUC_list
+        y_label = 'AUC_patient' if patient else 'AUC'
+        dataframe = pd.DataFrame(data={y_label: y_value,
+                                       x_label: x_value, 
+                                       'label':self.label_list})
+        sns.set(style="whitegrid")
+        fig, ax = plt.subplots(figsize=(8, 4.8))
+        tips = sns.load_dataset("tips")
+        ax = sns.boxplot( x=x_label, y=y_label, hue="label",
+                        data=dataframe, palette="Set3")
+        ax = sns.swarmplot( x=x_label, y=y_label, hue="label",
+                        data=dataframe, dodge=True)
+        plt.rc('axes', titlesize=18)   
+        plt.title(p_lbl + "_based " + title + " experiment")
+        path = '../results/figures/' + '_'.join([title, num_lbl, p_lbl]) + '.png'
+        plt.savefig(path)
         
 class exp_path:
     def __init__(self, run_name, inc=False):
         self.run_name = run_name
-        self.exp_name = '_'.join(self.run_name.split('_')[:-2])
-        if inc:
-            self.exp_name = '_'.join(self.exp_name.split('_')[:-1])
+        self.exp_name = '_'.join(self.run_name.split('_')[:-3])
         self.dataset_index = '_'.join(run_name.split('_')[-2:])
-        self.source_path = ''.join(['/data2/pancreas/box_data/wanyun/cv_10/source_',
+        self.rand_index = run_name.split('_')[-3]
+        self.ind_num = int(run_name.split('_')[-3])*10 + int(run_name.split('_')[-2])
+        self.x = int(run_name.split('_')[-1])
+        if inc:
+            self.exp_name = '_'.join(self.run_name.split('_')[:-4])
+            self.rand_index = run_name.split('_')[-4]
+            self.ind_num = int(run_name.split('_')[-4])*10 + int(run_name.split('_')[-2])
+            self.x = int(run_name.split('_')[-3])
+
+        rand_path = '/data2/pancreas/box_data/wanyun/box_' + self.rand_index
+        self.source_path = ''.join([rand_path + '/source_',
                                     self.dataset_index.split('_')[0], '.npy'])
-        self.target_path = ''.join(['/data2/pancreas/box_data/wanyun/cv_10/target_',
+        self.target_path = ''.join([rand_path + '/target_',
                                     self.dataset_index, '.npy'])
         self.model_path = ''.join(['../results/', self.exp_name,
                                    '/models/', self.run_name, '.h5'])
@@ -323,6 +388,10 @@ class exp_path:
                                  '/acc/', self.run_name, '.png'])
         self.loss_path = ''.join(['../results/', self.exp_name,
                                   '/loss/', self.run_name, '.png'])
+        self.time = ''.join(['../results/', self.exp_name,
+                                  '/time/', self.run_name])
+        self.roc_history = ''.join(['../results/', self.exp_name,
+                                 '/source_rocs/', self.run_name, '.npy'])
         self.roc_source_path = ''.join(['../results/', self.exp_name,
                                  '/source_rocs/', self.run_name, '.png'])
         self.roc_target_path = ''.join(['../results/', self.exp_name,
@@ -332,7 +401,8 @@ class exp_path:
         self.patch_target_path = ''.join(['../results/', self.exp_name,
                                  '/target_patch/', self.run_name, '.npy'])
         self.weight_path = ''.join(['../results/source/models/source_',
-                                    self.dataset_index.split('_')[0], '_300.h5'])
+                                    self.rand_index, '_', 
+                                    self.dataset_index.split('_')[0], '_0.h5'])
 
         
         
